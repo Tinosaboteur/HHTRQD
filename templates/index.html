@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Hệ hỗ trợ ra quyết định theo AHP</title>
+  <style>
+    table, th, td { border: 1px solid #888; border-collapse: collapse; padding: 5px; text-align: center; }
+    th { background-color: #eee; }
+    input { width: 80px; }
+    h2, h3, h4, h5 { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Hệ hỗ trợ ra quyết định chọn ngành học (Phương pháp AHP)</h1>
+  {% if not results %}
+  <form method="post">
+    <!-- Phần I: Ma trận so sánh cặp các tiêu chí -->
+    <h2>I. Ma trận so sánh cặp các tiêu chí</h2>
+    <p>Nhập giá trị cho các ô ở phần trên tam giác (i &lt; j). Các ô đường chéo cố định là 1, ô dưới tam giác sẽ được tính tự động.</p>
+    <table>
+      <tr>
+        <th>Tiêu chí</th>
+        {% for j, crit in enumerate(criteria) %}
+          <th>{{ crit }}</th>
+        {% endfor %}
+      </tr>
+      {% for i, crit in enumerate(criteria) %}
+      <tr>
+        <th>{{ crit }}</th>
+        {% for j in range(criteria|length) %}
+          {% if i == j %}
+            <td>1</td>
+          {% elif i < j %}
+            <td><input type="number" step="any" name="pc_{{ i }}_{{ j }}" required></td>
+          {% else %}
+            <td>--</td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </table>
+    <br>
+    
+    <!-- Phần II: Ma trận so sánh cặp các phương án cho mỗi tiêu chí -->
+    <h2>II. Ma trận so sánh cặp các phương án theo từng tiêu chí</h2>
+    {% for i, crit in enumerate(criteria) %}
+      <h3>Tiêu chí: {{ crit }}</h3>
+      <p>Nhập giá trị cho các ô ở phần trên tam giác (i &lt; j). Đường chéo cố định là 1, ô dưới tam giác sẽ được tính tự động.</p>
+      <table>
+        <tr>
+          <th>Phương án</th>
+          {% for j, alt in enumerate(alternatives) %}
+            <th>{{ alt }}</th>
+          {% endfor %}
+        </tr>
+        {% for r, alt_r in enumerate(alternatives) %}
+        <tr>
+          <th>{{ alt_r }}</th>
+          {% for c in range(alternatives|length) %}
+            {% if r == c %}
+              <td>1</td>
+            {% elif r < c %}
+              <td><input type="number" step="any" name="alt_pc_{{ i }}_{{ r }}_{{ c }}" required></td>
+            {% else %}
+              <td>--</td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+      <br>
+    {% endfor %}
+    <input type="submit" value="Tính toán">
+  </form>
+  {% else %}
+  <!-- Kết quả -->
+  <h2>Kết quả tính toán</h2>
+  <h3>A. Trọng số tiêu chí (tính từ ma trận so sánh cặp các tiêu chí)</h3>
+  <table>
+    <tr>
+      <th>Tiêu chí</th>
+      <th>Trọng số</th>
+    </tr>
+    {% for i, crit in enumerate(criteria) %}
+    <tr>
+      <td>{{ crit }}</td>
+      <td>{{ crit_weights[i] | round(4) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if crit_consistency %}
+  <h4>Kiểm tra tính nhất quán (CR của tiêu chí): {{ crit_consistency.cr | round(4) }}
+    {% if crit_consistency.cr < 0.1 %}
+      (Chấp nhận)
+    {% else %}
+      (Không chấp nhận)
+    {% endif %}
+  </h4>
+  {% endif %}
+  
+  <h3>B. Trọng số các phương án theo từng tiêu chí</h3>
+  {% for i, crit in enumerate(criteria) %}
+    <h4>Tiêu chí: {{ crit }}</h4>
+    <table>
+      <tr>
+        <th>Phương án</th>
+        <th>Trọng số</th>
+      </tr>
+      {% for j, alt in enumerate(alternatives) %}
+      <tr>
+        <td>{{ alt }}</td>
+        <td>{{ alt_weights[i][j] | round(4) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if alt_consistency and alt_consistency[i] %}
+    <h5>CR (phương án) cho tiêu chí này: {{ alt_consistency[i].cr | round(4) }}
+      {% if alt_consistency[i].cr < 0.1 %}
+        (Chấp nhận)
+      {% else %}
+        (Không chấp nhận)
+      {% endif %}
+    </h5>
+    {% endif %}
+    <br>
+  {% endfor %}
+  
+  <h3>C. Điểm tổng hợp của các phương án</h3>
+  <table>
+    <tr>
+      <th>Phương án</th>
+      <th>Điểm tổng hợp</th>
+    </tr>
+    {% for alt, score in global_scores.items() %}
+    <tr>
+      <td>{{ alt }}</td>
+      <td>{{ score | round(4) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <h3>Phương án được chọn: <span style="color:green;">{{ best_alternative }}</span></h3>
+  <br>
+  <a href="/">Thực hiện lại</a>
+  {% endif %}
+</body>
+</html>
