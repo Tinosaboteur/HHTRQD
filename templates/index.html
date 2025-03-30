@@ -7,7 +7,7 @@
     table, th, td { border: 1px solid #888; border-collapse: collapse; padding: 5px; text-align: center; }
     th { background-color: #eee; }
     input { width: 80px; }
-    h2, h3, h4, h5 { margin-bottom: 5px; }
+    h2, h3, h4 { margin-bottom: 5px; }
   </style>
 </head>
 <body>
@@ -41,7 +41,7 @@
     </table>
     <br>
     
-    <!-- Phần II: Ma trận so sánh cặp các phương án cho mỗi tiêu chí -->
+    <!-- Phần II: Ma trận so sánh cặp các phương án cho từng tiêu chí -->
     <h2>II. Ma trận so sánh cặp các phương án theo từng tiêu chí</h2>
     {% for i, crit in enumerate(criteria) %}
       <h3>Tiêu chí: {{ crit }}</h3>

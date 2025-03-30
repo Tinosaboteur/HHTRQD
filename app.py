@@ -1,5 +1,6 @@
 from flask import Flask, request, render_template
 import numpy as np
+import os
 
 app = Flask(__name__)
 
@@ -23,7 +24,7 @@ alternatives = [
 def compute_pairwise_matrix(prefix, n, form):
     """
     Tạo ma trận so sánh cặp kích thước n x n từ dữ liệu nhập.
-    Dữ liệu được lấy từ các ô có tên: prefix_i_j với i<j.
+    Dữ liệu được lấy từ các ô có tên: prefix_i_j với i < j.
     """
     A = np.ones((n, n))
     for i in range(n):
@@ -53,7 +54,7 @@ def ahp_weighting(A):
     consistency_vector = Aw / weights
     lambda_max = consistency_vector.mean()
     CI = (lambda_max - n) / (n - 1) if n > 1 else 0
-    RI_dict = {1:0.0, 2:0.0, 3:0.58, 4:0.90, 5:1.12, 6:1.24, 7:1.32, 8:1.41, 9:1.45, 10:1.49}
+    RI_dict = {1: 0.0, 2: 0.0, 3: 0.58, 4: 0.90, 5: 1.12, 6: 1.24, 7: 1.32, 8: 1.41, 9: 1.45, 10: 1.49}
     RI = RI_dict.get(n, 1.49)
     CR = CI / RI if RI != 0 else 0
 
@@ -71,7 +72,7 @@ def index():
         crit_weights = crit_weights.tolist()
         
         # Phần II: Xử lý ma trận so sánh cặp các phương án cho mỗi tiêu chí
-        alt_weights_all = []    # Danh sách trọng số các phương án theo từng tiêu chí
+        alt_weights_all = []      # Danh sách trọng số các phương án theo từng tiêu chí
         alt_consistency_all = []  # Danh sách kiểm tra nhất quán cho từng tiêu chí
         for i in range(n_crit):
             alt_matrix = compute_pairwise_matrix(f"alt_pc_{i}", m_alt, request.form)
@@ -80,7 +81,6 @@ def index():
             alt_consistency_all.append(consis)
         
         # Tính điểm tổng hợp cho mỗi phương án:
-        # global_score[alt] = sum_{i=0}^{n_crit-1} (crit_weight[i] * alt_weight[i][alt])
         global_scores = {alt: 0 for alt in alternatives}
         for i in range(n_crit):
             for j in range(m_alt):
@@ -89,11 +89,12 @@ def index():
         best_alternative = max(global_scores, key=global_scores.get)
         
         return render_template("index.html", criteria=criteria, alternatives=alternatives, results=True, 
-                                      crit_weights=crit_weights, crit_consistency=crit_consistency,
-                                      alt_weights=alt_weights_all, alt_consistency=alt_consistency_all,
-                                      global_scores=global_scores, best_alternative=best_alternative)
+                               crit_weights=crit_weights, crit_consistency=crit_consistency,
+                               alt_weights=alt_weights_all, alt_consistency=alt_consistency_all,
+                               global_scores=global_scores, best_alternative=best_alternative, enumerate=enumerate)
     else:
-        return render_template("index.html", criteria=criteria, alternatives=alternatives, results=None)
+        return render_template("index.html", criteria=criteria, alternatives=alternatives, results=None, enumerate=enumerate)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
