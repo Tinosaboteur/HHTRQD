@@ -16,7 +16,6 @@
   <form method="post">
     <!-- Phần I: Ma trận so sánh cặp các tiêu chí -->
     <h2>I. Ma trận so sánh cặp các tiêu chí</h2>
-    <p>Nhập giá trị cho các ô ở phần trên tam giác (i &lt; j). Các ô đường chéo cố định là 1, ô dưới tam giác sẽ được tính tự động.</p>
     <table>
       <tr>
         <th>Tiêu chí</th>
@@ -45,7 +44,6 @@
     <h2>II. Ma trận so sánh cặp các phương án theo từng tiêu chí</h2>
     {% for i, crit in enumerate(criteria) %}
       <h3>Tiêu chí: {{ crit }}</h3>
-      <p>Nhập giá trị cho các ô ở phần trên tam giác (i &lt; j). Đường chéo cố định là 1, ô dưới tam giác sẽ được tính tự động.</p>
       <table>
         <tr>
           <th>Phương án</th>
