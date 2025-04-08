@@ -4,141 +4,177 @@
   <meta charset="utf-8">
   <title>Hệ hỗ trợ ra quyết định theo AHP</title>
   <style>
-    table, th, td { border: 1px solid #888; border-collapse: collapse; padding: 5px; text-align: center; }
-    th { background-color: #eee; }
-    input { width: 80px; }
-    h2, h3, h4 { margin-bottom: 5px; }
+    :root {
+      --main-color: #1a8cff;
+      --grid-border: #bfbfbf;
+      --header-bg: #1a8cff;
+      --header-text: #ffffff;
+      --bg-color: #f9f9f9;
+      --input-border: #bfbfbf;
+    }
+    body {
+      font-family: "Calibri", sans-serif;
+      margin: 20px;
+      background-color: var(--bg-color);
+    }
+    h1, h2, h3, h4 {
+      color: var(--main-color);
+      margin-bottom: 10px;
+    }
+    form {
+      background: #fff;
+      padding: 20px;
+      border: 2px solid var(--main-color);
+      box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+      border-radius: 4px;
+    }
+    label {
+      display: inline-block;
+      width: 300px;
+      margin-right: 10px;
+      font-weight: bold;
+    }
+    input[type="number"] {
+      width: 100px;
+      padding: 4px;
+      border: 1px solid var(--input-border);
+      border-radius: 2px;
+      text-align: center;
+    }
+    input[type="submit"] {
+      background-color: var(--main-color);
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    input[type="submit"]:hover {
+      background-color: #006bb3;
+    }
+    /* Style dành cho các bảng ma trận giống như Excel */
+    table.excel-grid {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    table.excel-grid th, table.excel-grid td {
+      border: 1px solid var(--grid-border);
+      padding: 8px;
+      text-align: center;
+      background-color: #ffffff;
+    }
+    table.excel-grid th {
+      background-color: var(--header-bg);
+      color: var(--header-text);
+    }
+    tr:nth-child(even) td {
+      background-color: #f2f2f2;
+    }
+    /* Danh sách kết quả */
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    ul li {
+      background: #fff;
+      padding: 8px;
+      border: 1px solid var(--grid-border);
+      margin-bottom: 5px;
+      border-radius: 4px;
+    }
+    a {
+      color: var(--main-color);
+      text-decoration: none;
+      font-weight: bold;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
-  <h1>Hệ hỗ trợ ra quyết định chọn ngành học (Phương pháp AHP)</h1>
-  {% if not results %}
+  <h1>Hệ hỗ trợ ra quyết định chọn ngành học theo AHP</h1>
   <form method="post">
-    <!-- Phần I: Ma trận so sánh cặp các tiêu chí -->
-    <h2>I. Ma trận so sánh cặp các tiêu chí</h2>
-    <table>
+    <!-- So sánh cặp tiêu chí -->
+    <h2>1. So sánh cặp các tiêu chí</h2>
+    <table class="excel-grid">
       <tr>
-        <th>Tiêu chí</th>
-        {% for j, crit in enumerate(criteria) %}
+        <th>Tiêu chí / Tiêu chí</th>
+        {% for crit in criteria %}
           <th>{{ crit }}</th>
         {% endfor %}
       </tr>
-      {% for i, crit in enumerate(criteria) %}
-      <tr>
-        <th>{{ crit }}</th>
-        {% for j in range(criteria|length) %}
-          {% if i == j %}
-            <td>1</td>
-          {% elif i < j %}
-            <td><input type="number" step="any" name="pc_{{ i }}_{{ j }}" required></td>
-          {% else %}
-            <td>--</td>
-          {% endif %}
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </table>
-    <br>
-    
-    <!-- Phần II: Ma trận so sánh cặp các phương án cho từng tiêu chí -->
-    <h2>II. Ma trận so sánh cặp các phương án theo từng tiêu chí</h2>
-    {% for i, crit in enumerate(criteria) %}
-      <h3>Tiêu chí: {{ crit }}</h3>
-      <table>
+      {% for i in range(criteria|length) %}
         <tr>
-          <th>Phương án</th>
-          {% for j, alt in enumerate(alternatives) %}
-            <th>{{ alt }}</th>
-          {% endfor %}
-        </tr>
-        {% for r, alt_r in enumerate(alternatives) %}
-        <tr>
-          <th>{{ alt_r }}</th>
-          {% for c in range(alternatives|length) %}
-            {% if r == c %}
+          <th>{{ criteria[i] }}</th>
+          {% for j in range(criteria|length) %}
+            {% if i == j %}
               <td>1</td>
-            {% elif r < c %}
-              <td><input type="number" step="any" name="alt_pc_{{ i }}_{{ r }}_{{ c }}" required></td>
+            {% elif  i < j %}
+              <td>
+                <input type="number" step="0.01" name="pc_{{i}}_{{j}}" required>
+              </td>
             {% else %}
-              <td>--</td>
+              <td>—</td>
             {% endif %}
           {% endfor %}
         </tr>
+      {% endfor %}
+    </table>
+
+    <!-- So sánh cặp các phương án theo từng tiêu chí -->
+    <h2>2. So sánh cặp các phương án theo từng tiêu chí</h2>
+    {% for i in range(criteria|length) %}
+      <h3>Tiêu chí: {{ criteria[i] }}</h3>
+      <table class="excel-grid">
+        <tr>
+          <th>Phương án / Phương án</th>
+          {% for alt in alternatives %}
+            <th>{{ alt }}</th>
+          {% endfor %}
+        </tr>
+        {% for j in range(alternatives|length) %}
+          <tr>
+            <th>{{ alternatives[j] }}</th>
+            {% for k in range(alternatives|length) %}
+              {% if j == k %}
+                <td>1</td>
+              {% elif  j < k %}
+                <td>
+                  <input type="number" step="0.01" name="alt_pc_{{i}}_{{j}}_{{k}}" required>
+                </td>
+              {% else %}
+                <td>—</td>
+              {% endif %}
+            {% endfor %}
+          </tr>
         {% endfor %}
       </table>
-      <br>
     {% endfor %}
-    <input type="submit" value="Tính toán">
+    
+    <input type="submit" value="Phân tích AHP">
   </form>
-  {% else %}
-  <!-- Kết quả -->
-  <h2>Kết quả tính toán</h2>
-  <h3>A. Trọng số tiêu chí (tính từ ma trận so sánh cặp các tiêu chí)</h3>
-  <table>
-    <tr>
-      <th>Tiêu chí</th>
-      <th>Trọng số</th>
-    </tr>
-    {% for i, crit in enumerate(criteria) %}
-    <tr>
-      <td>{{ crit }}</td>
-      <td>{{ crit_weights[i] | round(4) }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% if crit_consistency %}
-  <h4>Kiểm tra tính nhất quán (CR của tiêu chí): {{ crit_consistency.cr | round(4) }}
-    {% if crit_consistency.cr < 0.1 %}
-      (Chấp nhận)
-    {% else %}
-      (Không chấp nhận)
-    {% endif %}
-  </h4>
-  {% endif %}
-  
-  <h3>B. Trọng số các phương án theo từng tiêu chí</h3>
-  {% for i, crit in enumerate(criteria) %}
-    <h4>Tiêu chí: {{ crit }}</h4>
-    <table>
+
+  {% if results %}
+    <h2>Kết quả phân tích:</h2>
+    <h3>Điểm tổng hợp của các phương án</h3>
+    <table class="excel-grid">
       <tr>
         <th>Phương án</th>
-        <th>Trọng số</th>
+        <th>Điểm tổng hợp</th>
       </tr>
-      {% for j, alt in enumerate(alternatives) %}
+      {% for alt, score in global_scores.items() %}
       <tr>
         <td>{{ alt }}</td>
-        <td>{{ alt_weights[i][j] | round(4) }}</td>
+        <td>{{ "%.4f"|format(score) }}</td>
       </tr>
       {% endfor %}
     </table>
-    {% if alt_consistency and alt_consistency[i] %}
-    <h5>CR (phương án) cho tiêu chí này: {{ alt_consistency[i].cr | round(4) }}
-      {% if alt_consistency[i].cr < 0.1 %}
-        (Chấp nhận)
-      {% else %}
-        (Không chấp nhận)
-      {% endif %}
-    </h5>
-    {% endif %}
-    <br>
-  {% endfor %}
-  
-  <h3>C. Điểm tổng hợp của các phương án</h3>
-  <table>
-    <tr>
-      <th>Phương án</th>
-      <th>Điểm tổng hợp</th>
-    </tr>
-    {% for alt, score in global_scores.items() %}
-    <tr>
-      <td>{{ alt }}</td>
-      <td>{{ score | round(4) }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  <h3>Phương án được chọn: <span style="color:green;">{{ best_alternative }}</span></h3>
-  <br>
-  <a href="/">Thực hiện lại</a>
+    <h3>Ngành học phù hợp nhất: <strong>{{ best_alternative }}</strong></h3>
+    <a href="/">Thực hiện lại</a>
   {% endif %}
 </body>
 </html>
