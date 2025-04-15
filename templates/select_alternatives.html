@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>AHP - Bước 0: Chọn/Nhập Phương Án</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script>
+    // Basic JS to toggle input sections based on radio button selection
+    function toggleAlternativeInput(mode) {
+        document.getElementById('db-selection').style.display = (mode === 'db') ? 'block' : 'none';
+        document.getElementById('custom-input').style.display = (mode === 'custom') ? 'block' : 'none';
+        // Optional: Clear inputs when switching modes
+        if (mode === 'db') {
+            document.querySelectorAll('#custom-input input[type="text"]').forEach(input => input.value = '');
+        } else if (mode === 'custom') {
+            document.querySelectorAll('#db-selection input[type="checkbox"]').forEach(chk => chk.checked = false);
+        }
+    }
+    // Function to add more custom input fields
+    function addCustomInput() {
+        const container = document.getElementById('custom-alternatives-container');
+        const newInput = document.createElement('div');
+        newInput.className = 'custom-alt-item';
+        newInput.innerHTML = `
+            <input type="text" name="custom_alternative_names" placeholder="Nhập tên phương án">
+            <button type="button" onclick="removeCustomInput(this)" class="btn-remove">-</button>
+        `;
+        container.appendChild(newInput);
+    }
+    // Function to remove a custom input field
+    function removeCustomInput(button) {
+        const container = document.getElementById('custom-alternatives-container');
+        // Prevent removing the last two inputs
+        if (container.children.length > 2) {
+             button.parentElement.remove();
+        } else {
+            alert('Cần ít nhất 2 phương án để so sánh.');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize visibility based on any pre-selected radio (if applicable)
+        const initialMode = document.querySelector('input[name="mode"]:checked');
+        if (initialMode) {
+            toggleAlternativeInput(initialMode.value);
+        } else {
+             // Default state if nothing is checked (e.g., hide both)
+             document.getElementById('db-selection').style.display = 'none';
+             document.getElementById('custom-input').style.display = 'none';
+        }
+    });
+  </script>
+   <style>
+    .mode-selection label { margin-right: 20px; }
+    #db-selection, #custom-input { margin-top: 15px; padding: 15px; border: 1px dashed #ccc; border-radius: 4px; }
+    #custom-alternatives-container .custom-alt-item { display: flex; align-items: center; margin-bottom: 8px; }
+    #custom-alternatives-container input[type="text"] { flex-grow: 1; margin-right: 10px; padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 3px;}
+    .btn-add, .btn-remove {
+        padding: 2px 8px; font-size: 16px; cursor: pointer;
+        border: 1px solid #ccc; background-color: #eee; border-radius: 3px;
+    }
+    .btn-remove { background-color: #fdd; border-color: #fbb;}
+   </style>
+</head>
+<body>
+  <h1>Hệ hỗ trợ ra quyết định chọn ngành học theo AHP</h1>
+  <h2>Bước 0: Chọn hoặc Nhập các Phương án (Ngành học)</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="post" action="{{ url_for('select_alternatives') }}">
+    <p>Vui lòng chọn cách bạn muốn xác định các phương án để so sánh:</p>
+    <div class="mode-selection">
+        <label>
+            <input type="radio" name="mode" value="db" onclick="toggleAlternativeInput('db')"> Sử dụng Database
+        </label>
+        <label>
+            <input type="radio" name="mode" value="custom" onclick="toggleAlternativeInput('custom')"> Nhập tùy chỉnh
+        </label>
+    </div>
+
+    <!-- Database Selection Section -->
+    <div id="db-selection" style="display: none;">
+        <p>Chọn ít nhất 2 phương án từ danh sách:</p>
+        <div class="criteria-selection"> {# Reuse style for columns #}
+            {% if all_alternatives_db %}
+                {% for alt in all_alternatives_db %}
+                <div class="checkbox-item">
+                    <input type="checkbox" name="alternative_ids" value="{{ alt.id }}" id="alt_{{ alt.id }}">
+                    <label for="alt_{{ alt.id }}">{{ alt.ten_phuong_an }}</label>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>Không tìm thấy phương án nào trong cơ sở dữ liệu.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Custom Input Section -->
+    <div id="custom-input" style="display: none;">
+        <p>Nhập tên cho ít nhất 2 phương án:</p>
+        <div id="custom-alternatives-container">
+             <!-- Start with 2 input fields -->
+             <div class="custom-alt-item">
+                 <input type="text" name="custom_alternative_names" placeholder="Tên phương án 1">
+                 <button type="button" onclick="removeCustomInput(this)" class="btn-remove" style="visibility: hidden;">-</button> {# Hide remove for first two #}
+             </div>
+             <div class="custom-alt-item">
+                 <input type="text" name="custom_alternative_names" placeholder="Tên phương án 2">
+                 <button type="button" onclick="removeCustomInput(this)" class="btn-remove" style="visibility: hidden;">-</button> {# Hide remove for first two #}
+            </div>
+        </div>
+        <button type="button" onclick="addCustomInput()" class="btn-add">+</button> Thêm phương án
+    </div>
+
+
+    <div class="button-container">
+        <input type="submit" value="Tiếp tục chọn Tiêu chí →" class="btn">
+    </div>
+  </form>
+
+  <div class="button-container">
+       <a href="{{ url_for('results_history') }}" class="btn btn-secondary">Xem lịch sử kết quả (Database)</a>
+  </div>
+
+</body>
+</html>

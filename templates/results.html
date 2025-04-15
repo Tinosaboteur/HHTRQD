@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>AHP - Kết quả cuối cùng</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .matrix-table td, .matrix-table th { font-size: 0.9em; padding: 5px; }
+        .details-section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        details summary { cursor: pointer; font-weight: bold; margin-bottom: 10px; color: var(--main-color); }
+        details summary:hover { text-decoration: underline; }
+        .weight-list li { margin-bottom: 3px; }
+        .consistency-info { font-size: 0.9em; color: #555; margin-top: 5px; }
+        .final-summary { text-align: center; font-size: 1.2em; margin-top: 25px; padding: 15px; background-color: #eafaf1; border: 1px solid #c3e6cb; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Kết quả phân tích AHP</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    {# ====================== SECTION 1: SUMMARY OF CALCULATIONS ====================== #}
+    <h2>1. Tóm tắt quá trình tính toán</h2>
+
+    {# --- Criteria Details --- #}
+    <div class="results-section details-section">
+        <details>
+            <summary>Chi tiết tính toán Tiêu chí (Nhấn để xem)</summary>
+            <h4>Ma trận so sánh cặp Tiêu chí:</h4>
+            {% if intermediate.crit_matrix %}
+            <table class="comparison-matrix excel-grid matrix-table">
+                <thead>
+                    <tr>
+                        <th>Tiêu chí</th>
+                        {% for crit in intermediate.criteria %}
+                            <th>{{ crit.ten_tieu_chi }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for crit_i in intermediate.criteria %} {# Outer loop #}
+                    {% set i = loop.index0 %}
+                    <tr>
+                        <th>{{ crit_i.ten_tieu_chi }}</th>
+                        {% for crit_j in intermediate.criteria %} {# Inner loop #}
+                            {% set j = loop.index0 %}
+                            <td>{{ "%.3f"|format(intermediate.crit_matrix[i][j]) }}</td>
+                        {% endfor %} {# End inner loop #}
+                    </tr>
+                    {% endfor %} {# End outer loop #}
+                </tbody>
+            </table>
+            {% else %}
+                <p>Không có dữ liệu ma trận tiêu chí.</p>
+            {% endif %}
+
+            <h4>Trọng số và Độ nhất quán của Tiêu chí:</h4>
+             <ul class="weight-list">
+                {% for crit in intermediate.criteria %} {# Loop for weights #}
+                    <li><strong>{{ crit.ten_tieu_chi }}:</strong> {{ "%.4f"|format(intermediate.crit_weights[loop.index0]) }}</li>
+                {% endfor %}
+            </ul>
+            <div class="consistency-info">
+                (λmax = {{ "%.4f"|format(intermediate.crit_lambda_max) }},
+                 CI = {{ "%.4f"|format(intermediate.crit_ci) }},
+                 RI (n={{ intermediate.criteria|length }}) = {{ "%.2f"|format(intermediate.crit_ri) }},
+                 CR = <strong>{{ "%.4f"|format(intermediate.crit_cr) }}</strong>
+                 {% if intermediate.crit_cr <= CR_THRESHOLD %} <span style="color:green;">(✓ Nhất quán)</span> {% else %} <span style="color:red;">(✗ Không nhất quán)</span> {% endif %})
+            </div>
+        </details>
+    </div>
+
+    {# --- Alternatives Details per Criterion --- #}
+    <div class="results-section details-section">
+         <details>
+            <summary>Chi tiết tính toán Phương án theo từng Tiêu chí (Nhấn để xem)</summary>
+            {% for crit in intermediate.criteria %} {# Outer loop for criteria #}
+                {% set i = loop.index0 %} {# Criterion index #}
+                <h4>Tiêu chí: {{ crit.ten_tieu_chi }}</h4>
+                {% set alt_matrix = intermediate.alt_matrices_all[i] %}
+                {% set alt_weights = intermediate.alt_weights_all[i] %}
+                {% set alt_lambda_max = intermediate.alt_lambda_max_all[i] %}
+                {% set alt_ci = intermediate.alt_ci_all[i] %}
+                {% set alt_cr = intermediate.alt_cr_all[i] %}
+                {% set alt_ri = intermediate.alt_ri_all[i] %}
+
+                <h5>Ma trận so sánh cặp Phương án (theo Tiêu chí {{ crit.ten_tieu_chi }}):</h5>
+                {% if alt_matrix %}
+                <table class="comparison-matrix excel-grid matrix-table small-table">
+                     <thead>
+                        <tr>
+                            <th>P.án</th>
+                            {% for alt in intermediate.alternatives %}
+                                <th title="{{ alt.ten_phuong_an }}">{{ loop.index }}</th> {# Use index for narrow header #}
+                            {% endfor %}
+                        </tr>
+                     </thead>
+                     <tbody>
+                        {% for alt_j in intermediate.alternatives %} {# Inner loop for rows #}
+                        {% set j = loop.index0 %}
+                        <tr>
+                             <th>{{ loop.index }}. {{ alt_j.ten_phuong_an }}</th> {# Row header with name #}
+                            {% for alt_k in intermediate.alternatives %} {# Innermost loop for columns #}
+                                {% set k = loop.index0 %}
+                                <td>{{ "%.3f"|format(alt_matrix[j][k]) }}</td>
+                            {% endfor %} {# End innermost loop #}
+                        </tr>
+                        {% endfor %} {# End inner loop #}
+                    </tbody>
+                </table>
+                {% else %}
+                    <p>Không có dữ liệu ma trận.</p>
+                {% endif %}
+
+                <h5>Trọng số cục bộ và Độ nhất quán (theo Tiêu chí {{ crit.ten_tieu_chi }}):</h5>
+                 <ul class="weight-list">
+                     {% for alt in intermediate.alternatives %} {# Loop for weights #}
+                        <li><strong>{{ alt.ten_phuong_an }}:</strong> {{ "%.4f"|format(alt_weights[loop.index0]) }}</li>
+                    {% endfor %}
+                </ul>
+                <div class="consistency-info">
+                    (λmax = {{ "%.4f"|format(alt_lambda_max) }},
+                     CI = {{ "%.4f"|format(alt_ci) }},
+                     RI (n={{ intermediate.alternatives|length }}) = {{ "%.2f"|format(alt_ri) }},
+                     CR = <strong>{{ "%.4f"|format(alt_cr) }}</strong>
+                     {% if alt_cr <= CR_THRESHOLD %} <span style="color:green;">(✓ Nhất quán)</span> {% else %} <span style="color:red;">(✗ Không nhất quán)</span> {% endif %})
+                </div>
+                <hr style="margin: 15px 0;">
+            {% endfor %} {# End outer loop for criteria #}
+        </details>
+    </div>
+
+    {# ====================== SECTION 2: FINAL RESULTS ====================== #}
+    <h2>2. Kết quả tổng hợp và xếp hạng</h2>
+    <div class="results-section">
+        <h3>Điểm tổng hợp và xếp hạng các Phương án (Ngành học)</h3>
+        {% if results %}
+            <table class="final-results-table excel-grid">
+                <thead>
+                    <tr>
+                        <th>Xếp hạng</th>
+                        <th>Ngành học (Phương án)</th>
+                        <th>Điểm tổng hợp</th>
+                        <th>Lựa chọn tốt nhất?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in results %} {# Loop for final results #}
+                    <tr {% if row.is_best %}class="best-choice"{% endif %}>
+                        <td>{{ loop.index }}</td> {# Use 1-based index for rank #}
+                        <td>{{ row.name }} {% if row.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</td>
+                        <td><strong>{{ "%.4f"|format(row.score) }}</strong></td>
+                        <td>{% if row.is_best %}🏆 Có{% else %}Không{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% if best_alternative_info %}
+            <div class="final-summary">
+                Dựa trên các đánh giá của bạn, ngành học phù hợp nhất là:
+                <strong>{{ best_alternative_info.name }}</strong>
+                 ({{ "%.4f"|format(best_alternative_info.score) }} điểm)
+            </div>
+            {% endif %}
+
+            {# Database Saving Info #}
+            {% if save_attempted %}
+                {% if save_successful %}
+                 <p style="color:green; text-align:center; margin-top:10px;"><small>Kết quả đã được lưu vào cơ sở dữ liệu.</small></p>
+                {% else %}
+                 <p style="color:red; text-align:center; margin-top:10px;"><small>Lỗi khi lưu kết quả vào cơ sở dữ liệu.</small></p>
+                {% endif %}
+            {% elif not can_save_to_db %}
+                 <p style="color:orange; text-align:center; margin-top:10px;"><small>Kết quả không được lưu vào cơ sở dữ liệu vì có sử dụng phương án tùy chỉnh.</small></p>
+            {% endif %}
+
+        {% else %}
+            <p>Không có kết quả cuối cùng để hiển thị.</p>
+        {% endif %}
+    </div>
+
+    <div class="button-container">
+        <a href="{{ url_for('clear_session_and_start') }}" class="btn">Bắt đầu lại phân tích mới</a>
+        <a href="{{ url_for('results_history') }}" class="btn btn-secondary">Xem lịch sử kết quả (DB)</a>
+    </div>
+</body>
+</html>

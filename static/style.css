@@ -1,0 +1,310 @@
+/* static/style.css */
+:root {
+    --main-color: #1a8cff; /* Blue */
+    --secondary-color: #6c757d; /* Gray */
+    --success-color: #28a745; /* Green */
+    --warning-color: #ffc107; /* Yellow */
+    --error-color: #dc3545; /* Red */
+    --info-color: #17a2b8; /* Teal */
+
+    --grid-border: #bfbfbf;
+    --header-bg: var(--main-color);
+    --header-text: #ffffff;
+    --bg-color: #f8f9fa;
+    --input-border: #ced4da;
+    --text-color: #212529;
+    --link-color: var(--main-color);
+    --table-bg-even: #f2f2f2;
+    --best-choice-bg: #d4edda; /* Light green */
+  }
+
+  body {
+    font-family: "Segoe UI", "Calibri", sans-serif;
+    margin: 20px auto; /* Center content */
+    padding: 15px;
+    max-width: 900px; /* Limit width for better readability */
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4 {
+    color: var(--main-color);
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+  }
+  h1 { font-size: 1.8em; }
+  h2 { font-size: 1.5em; }
+  h3 { font-size: 1.2em; margin-top: 25px; }
+  h4 { font-size: 1.1em; color: #444; border-bottom: none; margin-bottom: 8px;}
+  h5 { font-size: 1.0em; color: #555; margin-top: 15px; margin-bottom: 5px; }
+
+  form, .results-section, .history-group {
+    background: #fff;
+    padding: 20px 25px;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    border-radius: 5px;
+    margin-bottom: 25px;
+  }
+
+  /* --- Input Elements --- */
+  label {
+    /* display: inline-block; */ /* Removed for better checkbox alignment */
+    /* width: 300px; */
+    margin-right: 5px; /* Reduced margin */
+    font-weight: normal; /* Normal weight for checkbox labels */
+    vertical-align: middle; /* Align labels with checkboxes */
+  }
+  /* Make specific labels bold if needed, e.g., radio button group labels */
+  .mode-selection > label { font-weight: bold; }
+
+  input[type="number"].comparison-input {
+    width: 70px; /* Smaller width for matrix inputs */
+    padding: 6px 8px;
+    border: 1px solid var(--input-border);
+    border-radius: 3px;
+    text-align: center;
+    font-size: 14px;
+    -moz-appearance: textfield; /* Firefox */
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="checkbox"] {
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .checkbox-item {
+      margin-bottom: 8px;
+      display: block; /* Ensure each item is on a new line */
+  }
+  .criteria-selection {
+      margin: 15px 0;
+      columns: 2; /* Display criteria in columns if many */
+      -webkit-columns: 2;
+      -moz-columns: 2;
+      padding-left: 10px; /* Indent checkboxes slightly */
+  }
+
+
+  /* --- Buttons --- */
+  .button-container {
+    margin-top: 25px;
+    display: flex; /* Align buttons */
+    gap: 15px; /* Space between buttons */
+    flex-wrap: wrap; /* Wrap if needed */
+    justify-content: flex-start; /* Align buttons left */
+    padding-top: 15px; /* Add space above buttons */
+    border-top: 1px solid #eee; /* Separator line */
+  }
+
+  .btn, input[type="submit"] {
+    background-color: var(--main-color);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 15px;
+    text-decoration: none; /* For <a> tags styled as buttons */
+    display: inline-block; /* Proper alignment and padding */
+    transition: background-color 0.2s ease;
+  }
+  .btn:hover, input[type="submit"]:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+  }
+
+  .btn-secondary {
+      background-color: var(--secondary-color);
+  }
+  .btn-secondary:hover {
+      background-color: #5a6268;
+  }
+
+  /* --- Tables --- */
+  table.excel-grid, table.summary-table, table.final-results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border: 1px solid var(--grid-border); /* Outer border */
+  }
+
+  table.excel-grid th, table.excel-grid td,
+  table.summary-table th, table.summary-table td,
+  table.final-results-table th, table.final-results-table td {
+    border: 1px solid var(--grid-border);
+    padding: 8px 10px;
+    text-align: center;
+    background-color: #ffffff;
+    vertical-align: middle;
+  }
+
+  table.excel-grid thead th,
+  table.summary-table thead th,
+  table.final-results-table thead th {
+    background-color: var(--header-bg);
+    color: var(--header-text);
+    font-weight: bold;
+  }
+
+  /* First column header (usually item names) */
+  table.excel-grid th:first-child,
+  table.summary-table th:first-child,
+  table.final-results-table tbody td:nth-child(2), /* Target name column in results */
+  table.final-results-table thead th:nth-child(2)
+   {
+    text-align: left;
+    padding-left: 15px; /* More padding for left-aligned text */
+  }
+
+  table.excel-grid tbody th:first-child {
+    background-color: #e9ecef; /* Light gray for row headers */
+    color: var(--text-color);
+     text-align: left; /* Ensure row headers are left aligned */
+  }
+
+
+  /* Style for specific cells in comparison matrix */
+  td.diagonal {
+      background-color: #eee;
+      font-weight: bold;
+      color: #555;
+  }
+  td.reciprocal {
+      background-color: #f8f8f8;
+      color: #777;
+      font-style: italic;
+  }
+
+  /* Alternating row colors for readability */
+  table.excel-grid tbody tr:nth-child(even) td,
+  table.summary-table tbody tr:nth-child(even) td,
+  table.final-results-table tbody tr:nth-child(even) td {
+    background-color: var(--table-bg-even);
+  }
+    table.excel-grid tbody tr:nth-child(even) th:first-child {
+     background-color: #e9ecef; /* Keep row header consistent */
+  }
+
+
+  /* Highlight best choice in final results */
+  tr.best-choice td {
+      background-color: var(--best-choice-bg) !important; /* Use !important to override nth-child */
+      font-weight: bold;
+  }
+   /* Ensure best choice name remains bold and left-aligned */
+  tr.best-choice td:nth-child(2) {
+       font-weight: bold;
+       text-align: left;
+       padding-left: 15px;
+   }
+
+
+  /* Smaller table variant */
+  table.small-table {
+      font-size: 13px;
+      max-width: 500px; /* Adjust as needed */
+      margin-left: 15px; /* Indent smaller tables slightly */
+  }
+  table.small-table th, table.small-table td {
+      padding: 5px 8px;
+  }
+  table.matrix-table td, .matrix-table th { font-size: 0.9em; padding: 5px; }
+
+
+  /* --- Flash Messages --- */
+  .flash-messages {
+    margin-bottom: 20px;
+    padding: 0;
+    list-style: none;
+  }
+  .alert {
+    padding: 12px 18px;
+    margin-bottom: 10px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 15px;
+  }
+  .alert-success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+  }
+  .alert-warning {
+    color: #856404;
+    background-color: #fff3cd;
+    border-color: #ffeeba;
+  }
+  .alert-error {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+  }
+  .alert-info {
+    color: #0c5460;
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+  }
+
+  /* --- Links --- */
+  a {
+    color: var(--link-color);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+
+  /* --- Result Boxes (for Consistency Checks during input) --- */
+  .results-box {
+      background-color: #f0f0ff; /* Lighter blue */
+      border: 1px solid #ccd;
+      border-radius: 4px;
+      padding: 15px;
+      margin-top: 20px;
+      margin-bottom: 20px;
+      font-size: 0.95em;
+  }
+  .results-box h4 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #339;
+      border-bottom: 1px dotted #aac;
+      padding-bottom: 5px;
+      font-size: 1.1em;
+  }
+  .results-box p {
+      margin: 5px 0;
+      line-height: 1.5;
+  }
+
+  /* --- Validation Messages (for JS) --- */
+  .validation-message {
+      display: block; /* Show message below input */
+      font-size: 0.85em;
+      color: var(--error-color);
+      margin-top: 4px;
+      min-height: 1.2em; /* Reserve space */
+      text-align: left; /* Align message left */
+  }
+  input.comparison-input:invalid {
+      border-color: var(--error-color); /* Indicate invalid input */
+      background-color: #fffafa; /* Light pink background for invalid */
+  }
+
+/* --- Result Page Specific Styles --- */
+.details-section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+details summary { cursor: pointer; font-weight: bold; margin-bottom: 10px; color: var(--main-color); display: list-item; /* Ensure marker shows */}
+details summary:hover { text-decoration: underline; }
+details ul { list-style: disc; margin-left: 25px; }
+.weight-list { list-style: none; padding-left: 0; margin-top: 10px;}
+.weight-list li { margin-bottom: 4px; }
+.consistency-info { font-size: 0.9em; color: #555; margin-top: 10px; background-color: #f9f9f9; padding: 8px; border-radius: 3px; }
+.final-summary { text-align: center; font-size: 1.2em; margin-top: 25px; padding: 15px; background-color: #eafaf1; border: 1px solid #c3e6cb; border-radius: 5px; }
+.results-section ul li small { color: #888; font-style: italic; } /* For (Tùy chỉnh) tag */

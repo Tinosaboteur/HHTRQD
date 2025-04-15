@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>AHP - Bước 1: Chọn Tiêu Chí</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>Hệ hỗ trợ ra quyết định chọn ngành học theo AHP</h1>
+  <h2>Bước 1: Chọn các tiêu chí để đánh giá</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% if selected_alternatives %}
+  <div class="info-box" style="background-color: #e7f3fe; border-left: 5px solid #2196F3; padding: 10px 15px; margin-bottom: 20px;">
+      <h4>Các phương án đang được xem xét:</h4>
+      <ul>
+          {% for alt in selected_alternatives %}
+          <li>{{ alt.ten_phuong_an }} {% if alt.id is none %}(Tùy chỉnh){% endif %}</li>
+          {% endfor %}
+      </ul>
+  </div>
+  {% endif %}
+
+
+  <form method="post" action="{{ url_for('select_criteria') }}">
+    <p>Vui lòng chọn ít nhất 2 tiêu chí bạn muốn sử dụng để so sánh các ngành học:</p>
+    <div class="criteria-selection">
+      {% if all_criteria %}
+          {% for criterion in all_criteria %}
+          <div class="checkbox-item">
+            <input type="checkbox" name="criteria_ids" value="{{ criterion.id }}" id="crit_{{ criterion.id }}">
+            <label for="crit_{{ criterion.id }}">{{ criterion.ten_tieu_chi }}</label>
+          </div>
+          {% endfor %}
+      {% else %}
+          <p>Không tìm thấy tiêu chí nào trong cơ sở dữ liệu.</p>
+      {% endif %}
+    </div>
+    <div class="button-container">
+        <a href="{{ url_for('select_alternatives') }}" class="btn btn-secondary">← Quay lại chọn Phương án</a>
+        <input type="submit" value="Tiếp tục so sánh Tiêu chí →" class="btn">
+    </div>
+  </form>
+
+</body>
+</html>

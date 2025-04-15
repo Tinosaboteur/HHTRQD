@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>AHP - Lịch sử Kết quả</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Lịch sử Kết quả Đánh giá AHP (Lưu trữ từ Database)</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    {# Check the correct variable name passed from the route #}
+    {% if history_list %}
+        {# Iterate directly over the list (it's already sorted in Python) #}
+        {% for history_item in history_list %}
+            <div class="history-group">
+                {# Access the timestamp string from the dictionary item #}
+                <h3>Kết quả lúc: {{ history_item.timestamp_str }}</h3>
+                <table class="excel-grid">
+                    <thead>
+                        <tr>
+                            <th>Xếp hạng</th>
+                            <th>Ngành học</th> {# Assuming 'phuong_an' means 'nganh hoc' in your context #}
+                            <th>Điểm tổng hợp</th>
+                            <th>Tốt nhất?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Iterate over the 'results' list within the history_item #}
+                        {% for row in history_item.results %} {# Entries are already sorted by score in SQL #}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            {# Access data using dictionary keys (because of DictCursor) #}
+                            <td>{{ row.ten_phuong_an }}</td>
+                            <td>{{ "%.4f"|format(row.diem_tong_hop) }}</td>
+                            <td>{% if row.la_tot_nhat %}🏆 Có{% else %}Không{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>Chưa có lịch sử kết quả nào được lưu trong cơ sở dữ liệu.</p>
+    {% endif %}
+
+
+    <div class="button-container">
+        <a href="{{ url_for('clear_session_and_start') }}" class="btn">← Bắt đầu phân tích mới</a>
+    </div>
+</body>
+</html>

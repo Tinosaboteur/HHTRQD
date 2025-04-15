@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>AHP - Bước 3: So sánh Phương Án</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='validation.js') }}" defer></script>
+</head>
+<body>
+  <h1>Hệ hỗ trợ ra quyết định chọn ngành học theo AHP</h1>
+  <h2>Bước 3: So sánh cặp các phương án (ngành học)</h2>
+  <h3>Theo tiêu chí: <strong>{{ criterion.ten_tieu_chi }}</strong> ({{ criterion_index + 1 }}/{{ total_criteria }})</h3>
+  <p>Nhập mức độ ưu tiên tương đối của phương án hàng so với phương án cột <i>dựa trên tiêu chí này</i> (ví dụ: 1-9 hoặc nghịch đảo 1/2..1/9).</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="post" action="{{ url_for('compare_alternatives') }}">
+    {# Hidden input to help ensure correct step if needed, though session index is primary #}
+    {# <input type="hidden" name="criterion_id" value="{{ criterion.id }}"> #}
+    {# <input type="hidden" name="criterion_index" value="{{ criterion_index }}"> #}
+
+    <table class="comparison-matrix excel-grid">
+       <thead>
+        <tr>
+          <th>Phương án / Phương án</th>
+          {% for name in alternative_names %}
+            <th>{{ name }}</th>
+          {% endfor %}
+        </tr>
+       </thead>
+       <tbody>
+        {% for alt_j in alternatives %} {# Outer loop using loop.index0 for row index 'j' #}
+          {% set j = loop.index0 %} {# Store outer loop index #}
+          <tr>
+            <th>{{ alt_j.ten_phuong_an }}</th>
+            {% for alt_k in alternatives %} {# Inner loop using loop.index0 for column index 'k' #}
+              {% set k = loop.index0 %} {# Store inner loop index #}
+              {% if j == k %}
+                <td class="diagonal">1</td>
+              {% elif j < k %} {# Only need input for upper triangle #}
+                <td>
+                   {# Name uses criterion ID and alternative indices j, k from loop.index0 #}
+                  <input type="number" step="any" min="0.11" max="9.0" lang="en" class="comparison-input"
+                         name="alt_pc_{{ criterion.id }}_{{ j }}_{{ k }}"
+                         value="{{ form_data.get('alt_pc_' + criterion.id|string + '_' + j|string + '_' + k|string) if form_data else '' }}"
+                         required>
+                  <span class="validation-message"></span>
+                </td>
+              {% else %} {# Lower triangle is reciprocal #}
+                <td class="reciprocal">—</td> {# Value is reciprocal of input above #}
+              {% endif %}
+            {% endfor %} {# End inner loop #}
+          </tr>
+        {% endfor %} {# End outer loop #}
+       </tbody>
+    </table>
+
+    {# Display calculation results if available (e.g., after a failed submission for THIS criterion) #}
+    {% if alt_cr is not none %}
+    <div class="results-box">
+        <h4>Kết quả kiểm tra nhất quán (Phương án - Tiêu chí: {{ criterion.ten_tieu_chi }}):</h4>
+        <p>Giá trị Eigen lớn nhất (λmax): {{ "%.4f"|format(alt_lambda_max) }}</p>
+        <p>Chỉ số nhất quán (CI): {{ "%.4f"|format(alt_ci) }}</p>
+        <p>Chỉ số ngẫu nhiên (RI) (n={{ alternatives|length }}): {{ alt_ri if alt_ri is not none else RI_DICT.get(alternatives|length, 'N/A') }}</p>
+        <p>Tỷ số nhất quán (CR): <strong>{{ "%.4f"|format(alt_cr) }}</strong>
+           {% if alt_cr <= CR_THRESHOLD %}
+                <span style="color: green;">(✓ Nhất quán)</span>
+           {% else %}
+                <span style="color: red;">(✗ Không nhất quán - Cần nhập lại)</span>
+           {% endif %}
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="button-container">
+        {# Logic for back button remains the same #}
+         {% if criterion_index > 0 %}
+             <a href="{{ url_for('compare_criteria') }}" class="btn btn-secondary">← Quay lại so sánh Tiêu chí</a>
+         {% else %}
+             <a href="{{ url_for('compare_criteria') }}" class="btn btn-secondary">← Quay lại so sánh Tiêu chí</a>
+         {% endif %}
+
+        <input type="submit" value="Lưu & Tiếp tục {% if criterion_index + 1 < total_criteria %}với Tiêu chí Sau{% else %}Xem Kết quả{% endif %} →" class="btn">
+    </div>
+  </form>
+
+</body>
+</html>
