@@ -62,12 +62,12 @@
                 <p>Không có dữ liệu ma trận tiêu chí.</p>
             {% endif %}
 
-            <h4>Trọng số và Độ nhất quán của Tiêu chí:</h4>
+            <!-- <h4>Trọng số và Độ nhất quán của Tiêu chí:</h4>
              <ul class="weight-list">
                 {% for crit in intermediate.criteria %} {# Loop for weights #}
                     <li><strong>{{ crit.ten_tieu_chi }}:</strong> {{ "%.4f"|format(intermediate.crit_weights[loop.index0]) }}</li>
                 {% endfor %}
-            </ul>
+            </ul> -->
             <div class="consistency-info">
                 (λmax = {{ "%.4f"|format(intermediate.crit_lambda_max) }},
                  CI = {{ "%.4f"|format(intermediate.crit_ci) }},
@@ -120,12 +120,12 @@
                     <p>Không có dữ liệu ma trận.</p>
                 {% endif %}
 
-                <h5>Trọng số cục bộ và Độ nhất quán (theo Tiêu chí {{ crit.ten_tieu_chi }}):</h5>
+                <!-- <h5>Trọng số cục bộ và Độ nhất quán (theo Tiêu chí {{ crit.ten_tieu_chi }}):</h5>
                  <ul class="weight-list">
                      {% for alt in intermediate.alternatives %} {# Loop for weights #}
                         <li><strong>{{ alt.ten_phuong_an }}:</strong> {{ "%.4f"|format(alt_weights[loop.index0]) }}</li>
                     {% endfor %}
-                </ul>
+                </ul> -->
                 <div class="consistency-info">
                     (λmax = {{ "%.4f"|format(alt_lambda_max) }},
                      CI = {{ "%.4f"|format(alt_ci) }},
