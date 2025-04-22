@@ -5,12 +5,18 @@
   <title>AHP - Bước 2: So sánh Tiêu Chí</title>
    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
    <script src="{{ url_for('static', filename='validation.js') }}" defer></script>
+   <style>
+      .input-method-section { margin-top: 20px; padding: 15px; border: 1px solid #eee; border-radius: 4px; background-color: #f9f9f9; }
+      .input-method-section h4 { margin-top: 0; color: #555; }
+      .file-input-label { display: block; margin-bottom: 8px; font-weight: bold;}
+      .file-input-container input[type="file"] { margin-bottom: 10px; }
+   </style>
 </head>
 <body>
   <h1>Hệ hỗ trợ ra quyết định chọn ngành học theo AHP</h1>
   <h2>Bước 2: So sánh cặp các tiêu chí đã chọn</h2>
-  <p>Nhập mức độ quan trọng tương đối của tiêu chí hàng so với tiêu chí cột (ví dụ: 1-9). Xem thang đo Saaty nếu cần.</p>
-  <p><i>Gợi ý: 1=Ngang nhau, 3=Quan trọng hơn một chút, 5=Quan trọng hơn, 7=Rất quan trọng, 9=Cực kỳ quan trọng. Giá trị lẻ 2, 4, 6, 8 là các mức trung gian. Dùng số thập phân (vd: 1/3 ≈ 0.33, 1/5 = 0.2) cho mức độ kém quan trọng hơn.</i></p>
+  <p>Bạn có thể nhập thủ công mức độ quan trọng tương đối của tiêu chí hàng so với tiêu chí cột (1-9 hoặc nghịch đảo 1/2..1/9) HOẶC tải lên file Excel chứa ma trận so sánh.</p>
+  <p><i>Gợi ý thang đo Saaty: 1=Ngang nhau, 3=Quan trọng hơn một chút, 5=Quan trọng hơn, 7=Rất quan trọng, 9=Cực kỳ quan trọng. Giá trị nghịch đảo (vd: 1/3 ≈ 0.33, 1/5 = 0.2) cho mức độ kém quan trọng hơn.</i></p>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -22,44 +28,60 @@
     {% endif %}
   {% endwith %}
 
-  <form method="post" action="{{ url_for('compare_criteria') }}">
-    <table class="comparison-matrix excel-grid">
-      <thead>
-        <tr>
-          <th>Tiêu chí / Tiêu chí</th>
-          {% for name in criteria_names %}
-            <th>{{ name }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-      {% for crit_i in criteria %} {# Outer loop using loop.index0 for row index 'i' #}
-        {% set i = loop.index0 %} {# Store outer loop index #}
-        <tr>
-          <th>{{ crit_i.ten_tieu_chi }}</th>
-          {% for crit_j in criteria %} {# Inner loop using loop.index0 for column index 'j' #}
-            {% set j = loop.index0 %} {# Store inner loop index #}
-            {% if i == j %}
-              <td class="diagonal">1</td>
-            {% elif i < j %} {# Only need input for upper triangle #}
-              <td>
-                 {# Name uses indices i and j from loop.index0 #}
-                <input type="number" step="any" min="0.11" max="9.0" lang="en" class="comparison-input"
-                       name="pc_{{ i }}_{{ j }}"
-                       value="{{ form_data.get('pc_' + i|string + '_' + j|string) if form_data else '' }}"
-                       required>
-                <span class="validation-message"></span>
-              </td>
-            {% else %} {# Lower triangle is reciprocal #}
-              <td class="reciprocal">—</td> {# Value is reciprocal of input above #}
-            {% endif %}
-          {% endfor %} {# End inner loop #}
-        </tr>
-      {% endfor %} {# End outer loop #}
-      </tbody>
-    </table>
+  <form method="post" action="{{ url_for('compare_criteria') }}" enctype="multipart/form-data">
 
-    {# Display calculation results if available (e.g., after a failed submission) #}
+    <!-- Manual Input Section -->
+    <div class="input-method-section">
+        <h4>Nhập thủ công:</h4>
+        <table class="comparison-matrix excel-grid">
+          <thead>
+            <tr>
+              <th>Tiêu chí / Tiêu chí</th>
+              {% for name in criteria_names %}
+                <th>{{ name }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for crit_i in criteria %} {# Outer loop #}
+            {% set i = loop.index0 %}
+            <tr>
+              <th>{{ crit_i.ten_tieu_chi }}</th>
+              {% for crit_j in criteria %} {# Inner loop #}
+                {% set j = loop.index0 %}
+                {% if i == j %}
+                  <td class="diagonal">1</td>
+                {% elif i < j %} {# Upper triangle input #}
+                  <td>
+                    <input type="number" step="any" min="0.01" max="100" lang="en" class="comparison-input"
+                           name="pc_{{ i }}_{{ j }}"
+                           value="{{ form_data.get('pc_' + i|string + '_' + j|string) if form_data else '' }}"
+                           > {# Removed required here, as Excel is an option #}
+                    <span class="validation-message"></span> {# JS validation message #}
+                  </td>
+                {% else %} {# Lower triangle is reciprocal (display only) #}
+                  <td class="reciprocal">—</td>
+                {% endif %}
+              {% endfor %} {# End inner loop #}
+            </tr>
+          {% endfor %} {# End outer loop #}
+          </tbody>
+        </table>
+        <small><i>Để trống nếu bạn sử dụng file Excel.</i></small>
+    </div>
+
+    <!-- Excel Upload Section -->
+    <div class="input-method-section">
+        <h4>Hoặc Tải lên file Excel:</h4>
+         <div class="file-input-container">
+            <label for="criteria_excel_file" class="file-input-label">Chọn file (.xlsx, .xls):</label>
+            <input type="file" name="criteria_excel_file" id="criteria_excel_file" accept=".xlsx, .xls">
+        </div>
+        <small><i>File Excel cần chứa ma trận vuông {{ criteria|length }}x{{ criteria|length }}. Các giá trị phải là số, đường chéo là 1, và A[j,i] = 1/A[i,j].</i></small>
+        <small><i>Nếu cả hai phương thức đều được cung cấp, file Excel sẽ được ưu tiên.</i></small>
+    </div>
+
+    {# Display consistency check results if available (after a POST attempt) #}
     {% if crit_cr is not none %}
     <div class="results-box">
         <h4>Kết quả kiểm tra nhất quán (Tiêu chí):</h4>
@@ -70,7 +92,7 @@
            {% if crit_cr <= CR_THRESHOLD %}
                <span style="color: green;">(✓ Nhất quán)</span>
            {% else %}
-               <span style="color: red;">(✗ Không nhất quán - Cần nhập lại)</span>
+               <span style="color: red;">(✗ Không nhất quán - Cần nhập lại / sửa file Excel)</span>
            {% endif %}
         </p>
     </div>

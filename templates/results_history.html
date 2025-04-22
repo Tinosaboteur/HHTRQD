@@ -4,9 +4,17 @@
     <meta charset="UTF-8">
     <title>AHP - Lịch sử Kết quả</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .history-group { margin-bottom: 30px; }
+        .history-group h3 { border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        .criteria-weights-list { list-style: none; padding-left: 15px; font-size: 0.9em; margin-top: 10px;}
+        .criteria-weights-list li { margin-bottom: 3px; }
+        .error-message { color: var(--error-color); font-weight: bold; margin-top: 10px;}
+    </style>
 </head>
 <body>
     <h1>Lịch sử Kết quả Đánh giá AHP (Lưu trữ từ Database)</h1>
+     <p><small>Chỉ hiển thị các phân tích sử dụng hoàn toàn phương án và tiêu chí từ cơ sở dữ liệu.</small></p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -18,38 +26,55 @@
         {% endif %}
     {% endwith %}
 
-    {# Check the correct variable name passed from the route #}
+    {% if db_error %}
+     <p class="error-message">Lỗi Database: {{ db_error }}</p>
+    {% endif %}
+
     {% if history_list %}
-        {# Iterate directly over the list (it's already sorted in Python) #}
         {% for history_item in history_list %}
-            <div class="history-group">
-                {# Access the timestamp string from the dictionary item #}
-                <h3>Kết quả lúc: {{ history_item.timestamp_str }}</h3>
-                <table class="excel-grid">
-                    <thead>
-                        <tr>
-                            <th>Xếp hạng</th>
-                            <th>Ngành học</th> {# Assuming 'phuong_an' means 'nganh hoc' in your context #}
-                            <th>Điểm tổng hợp</th>
-                            <th>Tốt nhất?</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {# Iterate over the 'results' list within the history_item #}
-                        {% for row in history_item.results %} {# Entries are already sorted by score in SQL #}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            {# Access data using dictionary keys (because of DictCursor) #}
-                            <td>{{ row.ten_phuong_an }}</td>
-                            <td>{{ "%.4f"|format(row.diem_tong_hop) }}</td>
-                            <td>{% if row.la_tot_nhat %}🏆 Có{% else %}Không{% endif %}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="history-group results-section"> {# Reuse results-section style #}
+                <h3>Kết quả phân tích lúc: {{ history_item.timestamp_str }} <small>(ID: {{ history_item.group_id[:8] }}...)</small></h3>
+
+                <h4>Xếp hạng Phương án:</h4>
+                {% if history_item.alternatives %}
+                    <table class="excel-grid small-table">
+                        <thead>
+                            <tr>
+                                <th>Hạng</th>
+                                <th>Ngành học (Phương án)</th>
+                                <th>Điểm tổng hợp</th>
+                                <th>Tốt nhất?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in history_item.alternatives %} {# Already sorted by score #}
+                            <tr {% if row.is_best %}class="best-choice"{% endif %}>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ row.phuong_an_ten }}</td>
+                                <td>{{ "%.5f"|format(row.final_score) }}</td>
+                                <td>{% if row.is_best %}🏆 Có{% else %}Không{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                     <p>Không có dữ liệu phương án cho lần phân tích này.</p>
+                {% endif %}
+
+                 <h4>Trọng số Tiêu chí sử dụng:</h4>
+                 {% if history_item.criteria %}
+                     <ul class="criteria-weights-list">
+                         {% for crit_row in history_item.criteria %}
+                             <li><strong>{{ crit_row.tieu_chi_ten }}:</strong> {{ "%.4f"|format(crit_row.criterion_weight) }}</li>
+                         {% endfor %}
+                     </ul>
+                 {% else %}
+                      <p>Không có dữ liệu trọng số tiêu chí cho lần phân tích này.</p>
+                 {% endif %}
             </div>
-        {% endfor %}
-    {% else %}
+        {% endfor %} {# End loop history_list #}
+
+    {% elif not db_error %}
         <p>Chưa có lịch sử kết quả nào được lưu trong cơ sở dữ liệu.</p>
     {% endif %}
 

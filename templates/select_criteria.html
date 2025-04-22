@@ -4,10 +4,94 @@
   <meta charset="utf-8">
   <title>AHP - Bước 1: Chọn Tiêu Chí</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+   <!-- Use the same JS functions as select_alternatives -->
+   <script>
+    function toggleCriteriaInput(mode) {
+        document.getElementById('db-criteria-selection').style.display = (mode === 'db') ? 'block' : 'none';
+        document.getElementById('custom-criteria-input').style.display = (mode === 'custom') ? 'block' : 'none';
+        // Update required status based on mode
+        document.getElementById('db-criteria-selection-area').querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = (mode === 'db'));
+        document.getElementById('custom-criteria-container').querySelectorAll('input[type="text"]').forEach(inp => inp.required = (mode === 'custom'));
+
+        // Clear inputs when switching modes (optional but good practice)
+        if (mode === 'db') {
+            document.querySelectorAll('#custom-criteria-input input[type="text"]').forEach(input => input.value = '');
+        } else if (mode === 'custom') {
+            document.querySelectorAll('#db-criteria-selection input[type="checkbox"]').forEach(chk => chk.checked = false);
+        }
+    }
+
+    function addCustomInput(containerId, inputName, placeholder, minItems) {
+        const container = document.getElementById(containerId);
+        const newDiv = document.createElement('div');
+        newDiv.className = 'custom-item'; // Use a generic class
+        const newInput = document.createElement('input');
+        newInput.type = 'text';
+        newInput.name = inputName;
+        newInput.placeholder = placeholder + ' ' + (container.children.length + 1);
+        newInput.required = true; // Add required attribute
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.textContent = '-';
+        removeButton.className = 'btn-remove';
+        removeButton.onclick = function() { removeCustomInput(this, containerId, minItems); };
+
+        newDiv.appendChild(newInput);
+        newDiv.appendChild(removeButton);
+        container.appendChild(newDiv);
+    }
+
+    function removeCustomInput(button, containerId, minItems) {
+        const container = document.getElementById(containerId);
+        if (container.children.length > minItems) {
+            button.parentElement.remove();
+        } else {
+            alert(`Cần ít nhất ${minItems} mục.`);
+        }
+    }
+
+     document.addEventListener('DOMContentLoaded', () => {
+        const initialMode = document.querySelector('input[name="mode"]:checked');
+        if (initialMode) {
+            toggleCriteriaInput(initialMode.value);
+        } else {
+            // Default state if nothing is checked (e.g., hide both)
+            document.getElementById('db-criteria-selection').style.display = 'none';
+            document.getElementById('custom-criteria-input').style.display = 'none';
+             // Ensure inputs are not required initially
+             document.getElementById('db-criteria-selection-area').querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = false);
+             document.getElementById('custom-criteria-container').querySelectorAll('input[type="text"]').forEach(inp => inp.required = false);
+        }
+         // Ensure initial custom fields have required=true if custom mode is selected by default
+        if (document.getElementById('custom-criteria-input').style.display === 'block') {
+             document.getElementById('custom-criteria-container').querySelectorAll('input[type="text"]').forEach(inp => inp.required = true);
+        }
+    });
+  </script>
+   <style>
+    /* Add styles from select_alternatives.html if not already generic in style.css */
+    .mode-selection label { margin-right: 20px; cursor: pointer;}
+    .mode-selection input[type="radio"] { margin-right: 5px; }
+    #db-criteria-selection, #custom-criteria-input { margin-top: 15px; padding: 15px; border: 1px dashed #ccc; border-radius: 4px; }
+    .custom-item { display: flex; align-items: center; margin-bottom: 8px; }
+    .custom-item input[type="text"] { flex-grow: 1; margin-right: 10px; padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 3px;}
+    .btn-add, .btn-remove {
+        padding: 2px 8px; font-size: 16px; cursor: pointer;
+        border: 1px solid #ccc; background-color: #eee; border-radius: 3px;
+        line-height: 1; margin-left: 5px;
+    }
+    .btn-remove { background-color: #fdd; border-color: #fbb;}
+    .btn-add { background-color: #dfd; border-color: #bfb;}
+    .error-message { color: var(--error-color); font-weight: bold; margin-top: 10px;}
+    .info-box ul { margin-top: 5px; margin-bottom: 5px; padding-left: 20px; }
+    .info-box ul li { margin-bottom: 3px; list-style: disc; }
+   </style>
 </head>
 <body>
   <h1>Hệ hỗ trợ ra quyết định chọn ngành học theo AHP</h1>
-  <h2>Bước 1: Chọn các tiêu chí để đánh giá</h2>
+  <h2>Bước 1: Chọn hoặc Nhập các Tiêu chí Đánh giá</h2>
+   <p>Bạn cần chọn hoặc nhập ít nhất <strong>{{ MIN_CRITERIA }}</strong> tiêu chí để thực hiện phân tích.</p>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -19,12 +103,16 @@
     {% endif %}
   {% endwith %}
 
+  {% if db_error %}
+     <p class="error-message">Lỗi Database: {{ db_error }}</p>
+  {% endif %}
+
   {% if selected_alternatives %}
   <div class="info-box" style="background-color: #e7f3fe; border-left: 5px solid #2196F3; padding: 10px 15px; margin-bottom: 20px;">
       <h4>Các phương án đang được xem xét:</h4>
       <ul>
           {% for alt in selected_alternatives %}
-          <li>{{ alt.ten_phuong_an }} {% if alt.id is none %}(Tùy chỉnh){% endif %}</li>
+          <li>{{ alt.ten_phuong_an }} {% if alt.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</li>
           {% endfor %}
       </ul>
   </div>
@@ -32,19 +120,50 @@
 
 
   <form method="post" action="{{ url_for('select_criteria') }}">
-    <p>Vui lòng chọn ít nhất 2 tiêu chí bạn muốn sử dụng để so sánh các ngành học:</p>
-    <div class="criteria-selection">
-      {% if all_criteria %}
-          {% for criterion in all_criteria %}
-          <div class="checkbox-item">
-            <input type="checkbox" name="criteria_ids" value="{{ criterion.id }}" id="crit_{{ criterion.id }}">
-            <label for="crit_{{ criterion.id }}">{{ criterion.ten_tieu_chi }}</label>
-          </div>
-          {% endfor %}
-      {% else %}
-          <p>Không tìm thấy tiêu chí nào trong cơ sở dữ liệu.</p>
-      {% endif %}
+    <p>Vui lòng chọn cách bạn muốn xác định các tiêu chí để so sánh:</p>
+     <div class="mode-selection">
+        <label>
+            <input type="radio" name="mode" value="db" onclick="toggleCriteriaInput('db')" required> Sử dụng Database
+        </label>
+        <label>
+            <input type="radio" name="mode" value="custom" onclick="toggleCriteriaInput('custom')" required> Nhập tùy chỉnh
+        </label>
     </div>
+
+    <!-- DB Criteria Selection -->
+    <div id="db-criteria-selection" style="display: none;">
+        <p>Chọn ít nhất {{ MIN_CRITERIA }} tiêu chí từ danh sách:</p>
+        <div id="db-criteria-selection-area" class="criteria-selection">
+          {% if all_criteria_db %}
+              {% for criterion in all_criteria_db %}
+              <div class="checkbox-item">
+                <input type="checkbox" name="criteria_ids" value="{{ criterion.id }}" id="crit_{{ criterion.id }}">
+                <label for="crit_{{ criterion.id }}">{{ criterion.ten_tieu_chi }}</label>
+              </div>
+              {% endfor %}
+          {% elif not db_error %}
+              <p>Không tìm thấy tiêu chí nào trong cơ sở dữ liệu.</p>
+          {% endif %}
+        </div>
+         <small><i>Lưu ý: Chỉ kết quả sử dụng tiêu chí từ Database mới được lưu vào lịch sử.</i></small>
+    </div>
+
+    <!-- Custom Criteria Input -->
+     <div id="custom-criteria-input" style="display: none;">
+        <p>Nhập tên cho ít nhất {{ MIN_CRITERIA }} tiêu chí:</p>
+        <div id="custom-criteria-container">
+             <!-- Start with MIN_CRITERIA input fields -->
+             {% for i in range(MIN_CRITERIA) %}
+             <div class="custom-item">
+                 <input type="text" name="custom_criteria_names" placeholder="Tên tiêu chí {{ i+1 }}">
+                 <button type="button" onclick="removeCustomInput(this, 'custom-criteria-container', {{ MIN_CRITERIA }})" class="btn-remove" {% if loop.index <= MIN_CRITERIA %}style="visibility: hidden;"{% endif %}>-</button> {# Hide remove for first N #}
+             </div>
+              {% endfor %}
+        </div>
+        <button type="button" onclick="addCustomInput('custom-criteria-container', 'custom_criteria_names', 'Tên tiêu chí', {{ MIN_CRITERIA }})" class="btn-add">+</button> Thêm tiêu chí
+         <small><i>Lưu ý: Kết quả sử dụng tiêu chí tùy chỉnh sẽ không được lưu vào lịch sử.</i></small>
+    </div>
+
     <div class="button-container">
         <a href="{{ url_for('select_alternatives') }}" class="btn btn-secondary">← Quay lại chọn Phương án</a>
         <input type="submit" value="Tiếp tục so sánh Tiêu chí →" class="btn">
