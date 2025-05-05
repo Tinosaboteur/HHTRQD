@@ -1,0 +1,24 @@
+# .gitignore
+
+# --- Quan trọng: Bỏ qua file cấu hình local ---
+.env
+
+# Thư mục môi trường ảo Python (thay 'venv' bằng tên bạn dùng nếu khác)
+venv/
+.venv/
+env/
+*.env # Cũng có thể dùng wildcard nếu thư mục ảo tên là .env
+
+# Các file cache và biên dịch của Python
+__pycache__/
+*.py[cod] # Bỏ qua .pyc, .pyo, .pyd
+
+# Thư mục uploads (nếu bạn lưu file người dùng tải lên và không muốn đưa lên Git)
+uploads/
+
+# Các file cấu hình của IDE (ví dụ)
+.vscode/
+.idea/
+
+# Các file log
+*.log

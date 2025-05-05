@@ -1,9 +1,9 @@
 Flask
 numpy
 gunicorn
-psycopg2-binary  # Use binary for easier installation across systems
-python-dotenv    # For loading .env file locally
+psycopg2-binary 
+python-dotenv    
 pandas
-openpyxl         # Needed by pandas for reading .xlsx files
-werkzeug         # Usually installed with Flask, but good to be explicit
-uuid             # Built-in, but good practice
+openpyxl         
+werkzeug         
+uuid            
