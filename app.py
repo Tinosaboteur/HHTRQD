@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, render_template, redirect, url_for, session, flash
 import numpy as np
 import psycopg2 # <--- Import psycopg2
@@ -11,13 +12,14 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 import uuid
 from dotenv import load_dotenv
-load_dotenv() 
+load_dotenv()
 
 app = Flask(__name__)
 # Load secret key from environment variable for security
 app.secret_key = os.environ.get('SECRET_KEY', 'default_fallback_secret_key_for_dev_only') # Use env var
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024
+# Limit upload size to 1MB
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024 # 1 MB
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -42,31 +44,35 @@ def inject_global_constants():
 def get_connection():
     """Establishes a connection to the PostgreSQL database using DATABASE_URL."""
     conn = None
-    database_url = 'postgresql://admin:RSWYnshjkpXraGp5THCjSIaxUdtIwE4Z@dpg-d03iae2li9vc73fmjp60-a.singapore-postgres.render.com/test_2s9p'
+    database_url = os.environ.get('DATABASE_URL', None) # Lấy DATABASE_URL từ env
     if not database_url:
         print("Database connection error: DATABASE_URL environment variable not set.")
         flash("Lỗi cấu hình: Không tìm thấy chuỗi kết nối cơ sở dữ liệu.", "error")
         return None
     try:
         conn = psycopg2.connect(database_url) # Use DATABASE_URL
-        # Optional: Set client encoding if needed (usually utf8 is default)
-        # conn.set_client_encoding('UTF8')
         return conn
+    except psycopg2.OperationalError as e:
+        # Lỗi cụ thể hơn khi không kết nối được (sai host, port, db name, network issue)
+        print(f"Database connection error (Operational): {e}")
+        flash(f"Lỗi kết nối Database: Không thể kết nối tới server. Kiểm tra lại chuỗi kết nối và trạng thái DB.", "error")
+        return None
     except psycopg2.Error as e:
+        # Các lỗi psycopg2 khác (vd: authentication)
         print(f"Database connection error: {e}")
-        # Don't flash here as it might be called frequently. Log instead.
-        # flash(f"Lỗi kết nối Database: {e}", "error") # Avoid flashing in get_connection
+        flash(f"Lỗi Database: {e}", "error")
         return None
     except Exception as e:
         print(f"Unexpected error getting connection: {e}")
+        flash(f"Lỗi không mong muốn khi kết nối DB: {e}", "error")
         return None
 
 def execute_query(query, params=None, fetchone=False, fetchall=False, commit=False):
     """ Executes a query with error handling and connection management. """
     conn = get_connection()
     if not conn:
-        flash("Không thể kết nối tới cơ sở dữ liệu.", "error")
-        return None # Or raise an exception
+        # get_connection đã flash lỗi rồi
+        return None
 
     result = None
     try:
@@ -75,8 +81,12 @@ def execute_query(query, params=None, fetchone=False, fetchall=False, commit=Fal
             cursor.execute(query, params)
             if fetchone:
                 result = cursor.fetchone()
+                if result is not None:
+                    result = dict(result) # Convert DictRow to dict
             elif fetchall:
                 result = cursor.fetchall()
+                if result is not None:
+                    result = [dict(row) for row in result] # Convert list of DictRow to list of dict
 
             if commit:
                 conn.commit()
@@ -100,7 +110,8 @@ def execute_query(query, params=None, fetchone=False, fetchall=False, commit=Fal
             conn.close()
     return result
 
-# --- compute_pairwise_matrix, parse_excel_matrix, ahp_weighting remain unchanged ---
+# --- compute_pairwise_matrix, parse_excel_matrix, ahp_weighting ---
+# (Giữ nguyên các hàm này như phiên bản trước, chúng hoạt động tốt)
 def compute_pairwise_matrix(prefix, item_names, form):
     """Computes a pairwise comparison matrix from form data."""
     n = len(item_names)
@@ -142,59 +153,48 @@ def parse_excel_matrix(file_storage, expected_size, item_names_for_validation=No
     """Parses a pairwise matrix from an Excel file."""
     if not file_storage or file_storage.filename == '':
         return None, "Không có file nào được chọn."
-    # Allow common Excel extensions
-    allowed_extensions = ('.xlsx', '.xls', '.xlsm', '.xlsb') # Add more if needed
+    allowed_extensions = ('.xlsx', '.xls', '.xlsm', '.xlsb')
     if not file_storage.filename.lower().endswith(allowed_extensions):
         return None, "Định dạng file không hợp lệ. Chỉ chấp nhận file Excel (ví dụ: .xlsx, .xls)."
 
     try:
-        # Read only the first sheet using openpyxl engine for broader compatibility
         df = pd.read_excel(file_storage, header=None, engine='openpyxl')
-
-        # Attempt to find the start of the numeric matrix
         start_row, start_col = -1, -1
         for r in range(df.shape[0]):
             for c in range(df.shape[1]):
                 cell_value = df.iloc[r, c]
-                # Check if it's numeric (int, float, or numpy numeric types)
                 is_numeric = isinstance(cell_value, (int, float, np.number))
-                if is_numeric:
-                     # Check if this looks like the top-left '1'
+                is_valid_numeric = is_numeric and not pd.isna(cell_value)
+                if is_valid_numeric:
                     if abs(float(cell_value) - 1.0) < 1e-6:
-                        # Look ahead to see if it's likely a matrix
                         if r + 1 < df.shape[0] and c + 1 < df.shape[1]:
                              next_cell = df.iloc[r+1, c+1]
-                             if isinstance(next_cell, (int, float, np.number)):
+                             if isinstance(next_cell, (int, float, np.number)) and not pd.isna(next_cell):
                                 start_row, start_col = r, c
                                 break
-            if start_row != -1:
-                break
+            if start_row != -1: break
 
         if start_row == -1 or start_col == -1:
-            return None, "Không thể tự động xác định ma trận số trong file Excel. Đảm bảo ma trận bắt đầu bằng số 1 ở góc trên bên trái và chứa các giá trị số."
+            return None, "Không thể tự động xác định ma trận số trong file Excel. Đảm bảo ma trận bắt đầu bằng số 1 ở góc trên bên trái và chỉ chứa các giá trị số hợp lệ."
 
-        # Extract the potential matrix based on expected size
         if start_row + expected_size > df.shape[0] or start_col + expected_size > df.shape[1]:
             return None, f"Kích thước ma trận số tìm thấy không đủ lớn. Cần ma trận {expected_size}x{expected_size} bắt đầu từ ô ({start_row+1},{start_col+1})."
 
         matrix_df = df.iloc[start_row : start_row + expected_size, start_col : start_col + expected_size]
-
-        # Convert to numeric, coercing errors
         matrix_np = matrix_df.apply(pd.to_numeric, errors='coerce').to_numpy(dtype=float)
 
         if np.isnan(matrix_np).any():
-            # Find first NaN location for better error message
             nan_loc = np.argwhere(np.isnan(matrix_np))
             first_nan_row, first_nan_col = nan_loc[0]
-            return None, f"Ma trận chứa giá trị không phải số tại vị trí ({start_row + first_nan_row + 1},{start_col + first_nan_col + 1}) trong file Excel. Vui lòng kiểm tra file."
+            return None, f"Ma trận chứa giá trị không phải số hoặc ô trống tại vị trí ({start_row + first_nan_row + 1},{start_col + first_nan_col + 1}) trong file Excel."
 
-
-        # --- Basic Matrix Validation ---
         if matrix_np.shape != (expected_size, expected_size):
             return None, f"Kích thước ma trận không đúng. Cần {expected_size}x{expected_size}, tìm thấy {matrix_np.shape}."
 
         if not np.allclose(np.diag(matrix_np), 1.0):
-            return None, "Đường chéo chính của ma trận phải bằng 1."
+            diag_diff = np.where(np.abs(np.diag(matrix_np) - 1.0) > 1e-6)[0]
+            diff_indices = [start_row + i + 1 for i in diag_diff]
+            return None, f"Đường chéo chính của ma trận phải bằng 1. Lỗi tại hàng/cột tương ứng: {diff_indices}."
 
         for i in range(expected_size):
             for j in range(i + 1, expected_size):
@@ -202,16 +202,11 @@ def parse_excel_matrix(file_storage, expected_size, item_names_for_validation=No
                  val_ji = matrix_np[j, i]
                  if val_ij <= 0 or val_ji <= 0:
                      return None, f"Giá trị tại ({start_row+i+1},{start_col+j+1}) hoặc ({start_row+j+1},{start_col+i+1}) không phải là số dương."
-                 if abs(val_ij * val_ji - 1.0) > 1e-6: # Check reciprocal relationship
-                    return None, f"Giá trị nghịch đảo không chính xác tại vị trí ({start_row+i+1},{start_col+j+1}) và ({start_row+j+1},{start_col+i+1}). Giá trị phải dương và A[j,i] = 1/A[i,j] (tìm thấy {val_ij:.3f} và {val_ji:.3f})."
+                 if abs(val_ij * val_ji - 1.0) > 1e-4: # Increased tolerance
+                    return None, f"Giá trị nghịch đảo không chính xác tại vị trí ({start_row+i+1},{start_col+j+1}) và ({start_row+j+1},{start_col+i+1}). Giá trị phải dương và A[j,i] ≈ 1/A[i,j] (tìm thấy {val_ij:.4f} và {val_ji:.4f}, tích của chúng là {val_ij*val_ji:.4f})."
 
-        return matrix_np, None # Success
+        return matrix_np, None
 
-    except ValueError as e: # Catch specific pandas errors if possible
-        traceback.print_exc()
-        return None, f"Lỗi giá trị khi đọc file Excel: {e}"
-    except ImportError:
-         return None, "Lỗi thiếu thư viện đọc file Excel. Cần cài đặt 'openpyxl'."
     except Exception as e:
         traceback.print_exc()
         return None, f"Lỗi không mong muốn khi đọc file Excel: {e}"
@@ -228,78 +223,60 @@ def ahp_weighting(matrix):
     if np.any(matrix <= 0):
          flash("Ma trận chứa giá trị không dương.", "error")
          return None, None, None, None, None
+    if np.isnan(matrix).any() or np.isinf(matrix).any():
+        flash("Ma trận đầu vào chứa giá trị NaN hoặc vô cực.", "error")
+        return None, None, None, None, None
 
     try:
         eigvals, eigvecs = np.linalg.eig(matrix)
         real_eigvals = np.real(eigvals)
         lambda_max = np.max(real_eigvals)
-
         max_eigval_idx = np.argmax(real_eigvals)
         principal_eigvec = np.real(eigvecs[:, max_eigval_idx])
-
-        if np.all(principal_eigvec <= 1e-9): # Handle all-negative/zero case
-            # This is unusual, might indicate a problem matrix
-             principal_eigvec = np.abs(principal_eigvec) # Try absolute values
-             if np.all(principal_eigvec <= 1e-9): # Still zero? Fallback
-                 flash("Cảnh báo: Vector trọng số chính gần như bằng không. Sử dụng trọng số bằng nhau làm dự phòng.", "warning")
-                 weights = np.ones(n) / n
-             else:
-                weights = principal_eigvec
-        elif np.any(principal_eigvec < -1e-9):
-             flash("Cảnh báo: Vector trọng số có giá trị âm, có thể do tính không nhất quán cao.", "warning")
-             weights = np.maximum(0, principal_eigvec) # Set negative values to 0
-        else:
-             weights = principal_eigvec
-
+        weights = np.abs(principal_eigvec)
         sum_weights = np.sum(weights)
 
         if abs(sum_weights) < 1e-9:
-             flash("Lỗi: Tổng vector trọng số gần bằng 0. Không thể chuẩn hóa. Sử dụng trọng số bằng nhau làm dự phòng.", "error")
-             weights = np.ones(n) / n # Fallback to equal weights
-             # Recalculate consistency based on original matrix, even if weights are fallback
-             lambda_max_for_ci = lambda_max # Use the calculated one
+             flash("Lỗi: Tổng vector trọng số gần bằng 0. Sử dụng trọng số bằng nhau làm dự phòng.", "warning") # Thay đổi từ error sang warning
+             weights = np.ones(n) / n # Fallback
+             lambda_max_for_ci = lambda_max # Vẫn dùng lambda_max tính được cho CI
         else:
              weights /= sum_weights # Normalize
-             lambda_max_for_ci = lambda_max # Use the calculated one
+             lambda_max_for_ci = lambda_max
 
-        # Calculate Consistency
         if n > 2:
-            CI = (lambda_max_for_ci - n) / (n - 1)
-            CI = max(0.0, CI)
+            CI = (lambda_max_for_ci - n) / (n - 1) if (n - 1) > 1e-9 else 0.0
+            CI = max(0.0, CI) # CI >= 0
             RI = RI_DICT.get(n)
             if RI is None:
-                 flash(f"Lỗi: Không tìm thấy Chỉ số ngẫu nhiên (RI) cho ma trận kích thước n={n}.", "error")
-                 RI = RI_DICT[max(RI_DICT.keys())] # Fallback might be misleading
-                 CR = float('inf')
-            elif RI == 0:
-                 CR = float('inf') if CI > 1e-9 else 0.0
+                 closest_n = max([k for k in RI_DICT if k < n], default=None)
+                 if closest_n:
+                     RI = RI_DICT[closest_n]
+                     flash(f"Cảnh báo: Không tìm thấy RI cho n={n}. Sử dụng RI cho n={closest_n} ({RI:.2f}).", "warning")
+                     CR = CI / RI if RI > 1e-9 else float('inf') if CI > 1e-9 else 0.0
+                 else:
+                    flash(f"Lỗi: Không tìm thấy RI cho n={n} hoặc nhỏ hơn.", "error")
+                    RI = None # Đặt RI là None nếu không tìm thấy
+                    CR = None # CR cũng không tính được
+            elif RI <= 1e-9:
+                 CR = 0.0 if CI <= 1e-9 else float('inf')
             else:
                  CR = CI / RI
         else: # n <= 2
             CI = 0.0
-            RI = 0.00
+            RI = RI_DICT.get(n, 0.00) # Lấy RI cho n=1, 2 nếu có
             CR = 0.0
 
+        # Kiểm tra NaN/Inf trong kết quả trước khi trả về
         if any(x is not None and (math.isnan(x) or math.isinf(x)) for x in [lambda_max_for_ci, CI, CR]) or \
-           any(np.isnan(weights)) or any(np.isinf(weights)):
+           np.isnan(weights).any() or np.isinf(weights).any():
             flash("Lỗi: Kết quả tính toán AHP chứa NaN hoặc vô cực.", "error")
             print(f"NaN/Inf detected: lambda_max={lambda_max_for_ci}, CI={CI}, CR={CR}, weights={weights}")
-            # Fallback or signal error
             return None, None, None, None, None # Signal error
 
-        # Round results for cleaner storage/display
-        weights = np.round(weights, 6)
-        lambda_max_for_ci = round(lambda_max_for_ci, 6)
-        CI = round(CI, 6)
-        CR = round(CR, 6)
-        # RI doesn't need rounding usually
-
-        # Ensure weights still sum reasonably close to 1 after rounding
+        # Đảm bảo trọng số tổng gần bằng 1
         if abs(np.sum(weights) - 1.0) > 1e-5:
-            # Re-normalize slightly if rounding caused drift
             weights /= np.sum(weights)
-            weights = np.round(weights, 6)
-
 
         return weights, lambda_max_for_ci, CI, CR, RI
 
@@ -311,6 +288,58 @@ def ahp_weighting(matrix):
         flash(f"Lỗi không mong muốn trong tính toán AHP: {e}", "error")
         traceback.print_exc()
         return None, None, None, None, None
+
+
+# --- Helper Functions for Session Management ---
+# (Giữ nguyên các hàm helper: clear_temporary_alt_data_for_index, clear_temporary_alt_data, clear_ahp_session_data, clear_session_data)
+def clear_temporary_alt_data_for_index(index):
+    """Clears temporary session keys for a specific alt comparison index."""
+    keys = ['temp_alt_matrix', 'temp_alt_lambda_max', 'temp_alt_ci', 'temp_alt_cr', 'temp_alt_ri']
+    for key_base in keys:
+        session.pop(f'{key_base}_{index}', None)
+
+def clear_temporary_alt_data(num_criteria):
+    """Clears all temporary alt comparison keys."""
+    max_crit_guess = max(num_criteria if isinstance(num_criteria, int) and num_criteria > 0 else 0, 25)
+    for i in range(max_crit_guess):
+        clear_temporary_alt_data_for_index(i)
+    session.pop('form_data_alt', None)
+
+def clear_ahp_session_data():
+    """Clears session keys related to AHP steps (criteria onwards)."""
+    keys_to_clear = [
+        'selected_criteria', 'all_db_criteria', 'criteria_selected',
+        'crit_matrix', 'crit_weights', 'crit_lambda_max', 'crit_ci', 'crit_cr', 'crit_ri',
+        'criteria_comparison_done', 'form_data_crit',
+        'alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all',
+        'current_alt_criterion_index', 'alternative_comparisons_done', 'form_data_alt',
+        'final_scores', 'best_alternative_info'
+    ]
+    num_crit_guess = len(session.get('selected_criteria', []))
+    modified = False
+    for key in keys_to_clear:
+        if session.pop(key, None) is not None:
+            modified = True
+    clear_temporary_alt_data(num_crit_guess)
+    if modified:
+        session.modified = True
+
+def clear_session_data():
+    """Clears ALL session data related to an AHP run, including alternatives."""
+    clear_ahp_session_data()
+    modified = False
+    if session.pop('session_alternatives', None) is not None: modified = True
+    if session.pop('all_db_alternatives', None) is not None: modified = True
+    if session.pop('alternatives_selected', None) is not None: modified = True
+    if modified:
+        session.modified = True
+
+@app.route("/clear")
+def clear_session_and_start():
+    """Clears the session and redirects to the start."""
+    clear_session_data()
+    flash("Session đã được xóa. Bắt đầu một phân tích mới.", "info")
+    return redirect(url_for('select_alternatives'))
 
 # --- Routes ---
 
@@ -325,7 +354,7 @@ def select_alternatives():
     if request.method == "POST":
         selection_mode = request.form.get('mode')
         alternatives = []
-        all_db_alternatives = False # Default
+        all_db_alternatives = False
 
         if selection_mode == 'db':
             selected_ids_str = request.form.getlist('alternative_ids')
@@ -338,33 +367,26 @@ def select_alternatives():
                 flash("ID phương án đã chọn không hợp lệ.", "error")
                 return redirect(url_for('select_alternatives'))
 
-            # PostgreSQL uses %s placeholders
             format_strings = ','.join(['%s'] * len(selected_ids))
-            # No direct FIELD equivalent, fetch and reorder in Python
             query = f"SELECT id, ten_phuong_an FROM phuong_an WHERE id IN ({format_strings})"
-            # Parameters need to be a tuple
             params = tuple(selected_ids)
             alternatives_from_db_unordered = execute_query(query, params, fetchall=True)
 
-            if alternatives_from_db_unordered is None: # Check if query failed
-                 # execute_query already flashed the error
+            if alternatives_from_db_unordered is None:
                  return redirect(url_for('select_alternatives'))
 
             if len(alternatives_from_db_unordered) != len(selected_ids):
                  flash("Không thể truy xuất tất cả phương án đã chọn hoặc ID không tồn tại.", "error")
                  return redirect(url_for('select_alternatives'))
 
-            # Reorder based on original selection order
             db_map = {item['id']: item for item in alternatives_from_db_unordered}
             alternatives = [db_map[sid] for sid in selected_ids if sid in db_map]
 
             if len(alternatives) != len(selected_ids):
-                 # This case should ideally not happen if the first length check passed
                  flash("Lỗi sắp xếp lại phương án đã chọn.", "error")
                  return redirect(url_for('select_alternatives'))
 
-            all_db_alternatives = True # Success!
-
+            all_db_alternatives = True
 
         elif selection_mode == 'custom':
             custom_names = request.form.getlist('custom_alternative_names')
@@ -385,27 +407,23 @@ def select_alternatives():
             flash("Vui lòng chọn chế độ 'Sử dụng Database' hoặc 'Nhập tùy chỉnh'.", "warning")
             return redirect(url_for('select_alternatives'))
 
-        clear_session_data() # Clear previous run data
+        clear_session_data()
         session['session_alternatives'] = alternatives
         session['all_db_alternatives'] = all_db_alternatives
         session['alternatives_selected'] = True
         session.modified = True
-
         return redirect(url_for('select_criteria'))
 
     # --- GET Request ---
-    clear_session_data() # Start fresh on GET
+    clear_session_data()
     db_error = None
     query = "SELECT id, ten_phuong_an FROM phuong_an ORDER BY id"
     all_alternatives_db = execute_query(query, fetchall=True)
-
-    # execute_query handles flashing errors, but we might set a db_error flag if needed
     if all_alternatives_db is None:
          db_error = "Lỗi lấy danh sách phương án từ DB."
-         # flash message is already handled by execute_query
 
     return render_template("select_alternatives.html",
-                           all_alternatives_db=all_alternatives_db if all_alternatives_db else [], # Ensure it's a list
+                           all_alternatives_db=all_alternatives_db if all_alternatives_db else [],
                            db_error=db_error)
 
 @app.route("/select_criteria", methods=["GET", "POST"])
@@ -415,10 +433,17 @@ def select_criteria():
         flash("Vui lòng chọn hoặc nhập các phương án trước.", "info")
         return redirect(url_for('select_alternatives'))
 
+    selected_alternatives = session.get('session_alternatives', [])
+    if not selected_alternatives or not isinstance(selected_alternatives, list) or \
+       not all(isinstance(item, dict) for item in selected_alternatives):
+         flash("Dữ liệu phương án trong session không hợp lệ. Vui lòng chọn lại phương án.", "error")
+         clear_session_data()
+         return redirect(url_for('select_alternatives'))
+
     if request.method == "POST":
         selection_mode = request.form.get('mode')
         criteria = []
-        all_db_criteria = False # Default
+        all_db_criteria = False
 
         if selection_mode == 'db':
             selected_ids_str = request.form.getlist('criteria_ids')
@@ -432,19 +457,17 @@ def select_criteria():
                 return redirect(url_for('select_criteria'))
 
             format_strings = ','.join(['%s'] * len(selected_ids))
-            # Fetch and reorder in Python
             query = f"SELECT id, ten_tieu_chi FROM tieu_chi WHERE id IN ({format_strings})"
             params = tuple(selected_ids)
             criteria_from_db_unordered = execute_query(query, params, fetchall=True)
 
             if criteria_from_db_unordered is None:
-                 return redirect(url_for('select_criteria')) # Error flashed
+                 return redirect(url_for('select_criteria'))
 
             if len(criteria_from_db_unordered) != len(selected_ids):
                  flash("Không thể truy xuất tất cả tiêu chí đã chọn hoặc ID không tồn tại.", "error")
                  return redirect(url_for('select_criteria'))
 
-            # Reorder
             db_map = {item['id']: item for item in criteria_from_db_unordered}
             criteria = [db_map[sid] for sid in selected_ids if sid in db_map]
 
@@ -452,8 +475,7 @@ def select_criteria():
                  flash("Lỗi sắp xếp lại tiêu chí đã chọn.", "error")
                  return redirect(url_for('select_criteria'))
 
-            all_db_criteria = True # Success!
-
+            all_db_criteria = True
 
         elif selection_mode == 'custom':
             custom_names = request.form.getlist('custom_criteria_names')
@@ -474,9 +496,7 @@ def select_criteria():
             flash("Vui lòng chọn chế độ 'Sử dụng Database' hoặc 'Nhập tùy chỉnh'.", "warning")
             return redirect(url_for('select_criteria'))
 
-        # Clear data from subsequent steps
-        clear_ahp_session_data()
-
+        clear_ahp_session_data() # Clear only from criteria onwards
         session['selected_criteria'] = criteria
         session['all_db_criteria'] = all_db_criteria
         session['criteria_selected'] = True
@@ -487,18 +507,15 @@ def select_criteria():
     db_error = None
     query = "SELECT id, ten_tieu_chi FROM tieu_chi ORDER BY id"
     all_criteria_db = execute_query(query, fetchall=True)
-
     if all_criteria_db is None:
         db_error = "Lỗi lấy danh sách tiêu chí từ DB."
-        # Flash handled by execute_query
 
+    selected_alternatives_for_display = session.get('session_alternatives', [])
     return render_template("select_criteria.html",
                            all_criteria_db=all_criteria_db if all_criteria_db else [],
                            db_error=db_error,
-                           selected_alternatives=session.get('session_alternatives', []))
+                           selected_alternatives=selected_alternatives_for_display)
 
-# --- compare_criteria, compare_alternatives remain largely the same, ---
-# --- as they mostly handle form data, Excel parsing, and AHP logic, not direct DB interaction here ---
 @app.route("/compare_criteria", methods=["GET", "POST"])
 def compare_criteria():
     """Step 2: User compares selected criteria (manual or Excel)."""
@@ -507,38 +524,46 @@ def compare_criteria():
         return redirect(url_for('select_criteria'))
 
     selected_criteria = session.get('selected_criteria', [])
-    if not selected_criteria or len(selected_criteria) < MIN_CRITERIA:
-        flash(f"Số lượng tiêu chí không hợp lệ ({len(selected_criteria)}), cần ít nhất {MIN_CRITERIA}. Vui lòng chọn lại.", "error")
+    if not selected_criteria or not isinstance(selected_criteria, list) or len(selected_criteria) < MIN_CRITERIA or \
+       not all(isinstance(c, dict) and 'ten_tieu_chi' in c for c in selected_criteria):
+        flash(f"Số lượng hoặc cấu trúc tiêu chí không hợp lệ. Vui lòng chọn lại.", "error")
+        clear_ahp_session_data()
         return redirect(url_for('select_criteria'))
 
     criteria_names = [c['ten_tieu_chi'] for c in selected_criteria]
     num_criteria = len(selected_criteria)
     crit_matrix = None
-    input_method = "form" # Default
+    input_method = "form"
 
     if request.method == "POST":
-        # Check for Excel file upload first
         if 'criteria_excel_file' in request.files:
             file = request.files['criteria_excel_file']
             if file and file.filename != '':
-                # filename = secure_filename(file.filename) # Not needed if not saving
                 crit_matrix, error_msg = parse_excel_matrix(file, num_criteria, criteria_names)
                 if error_msg:
                     flash(f"Lỗi xử lý file Excel tiêu chí: {error_msg}", "error")
-                    session.pop('form_data_crit', None)
+                    # Clear any potentially stored calculation results from previous attempts
                     session.pop('crit_lambda_max', None); session.pop('crit_ci', None); session.pop('crit_cr', None); session.pop('crit_ri', None)
+                    session.pop('form_data_crit', None) # Clear form data if Excel error occurred
                     session.modified = True
                     return redirect(url_for('compare_criteria'))
                 elif crit_matrix is not None:
                      input_method = "excel"
                      flash("Đã nhập ma trận so sánh tiêu chí từ file Excel.", "info")
+                     session.pop('form_data_crit', None) # Clear form data if Excel is used
 
-        # If no valid matrix from Excel, try form data
-        if crit_matrix is None:
+        if crit_matrix is None: # If Excel wasn't used or failed validation silently
+            form_keys_present = any(key.startswith('pc_') for key in request.form)
+            if not form_keys_present and input_method == "form":
+                 flash("Vui lòng nhập giá trị so sánh thủ công hoặc tải lên file Excel.", "warning")
+                 return redirect(url_for('compare_criteria'))
+            # If input_method is 'excel' but crit_matrix is None here, it means parse_excel_matrix failed earlier and flashed message
+
             input_method = "form"
             crit_matrix = compute_pairwise_matrix("pc", criteria_names, request.form)
             if crit_matrix is None:
-                session['form_data_crit'] = request.form
+                session['form_data_crit'] = request.form # Preserve form data on manual input error
+                # Clear calculation results
                 session.pop('crit_lambda_max', None); session.pop('crit_ci', None); session.pop('crit_cr', None); session.pop('crit_ri', None)
                 session.modified = True
                 return redirect(url_for('compare_criteria'))
@@ -548,36 +573,47 @@ def compare_criteria():
 
         if crit_weights is None:
             if input_method == "form":
-                 session['form_data_crit'] = request.form
+                 session['form_data_crit'] = request.form # Keep form data on calc error
+            # Clear potentially bad calculation results
             session.pop('crit_lambda_max', None); session.pop('crit_ci', None); session.pop('crit_cr', None); session.pop('crit_ri', None)
             session.modified = True
             return redirect(url_for('compare_criteria'))
 
-        # Store results temporarily and permanently if CR passes
+        # Store intermediate results (even if CR fails, for display)
         session['crit_matrix'] = crit_matrix.tolist()
         session['crit_lambda_max'] = crit_lambda_max
         session['crit_ci'] = crit_ci
         session['crit_cr'] = crit_cr
-        session['crit_ri'] = crit_ri
+        session['crit_ri'] = crit_ri # Can be None
+        session.modified = True # Make sure these are saved
 
-        if crit_cr > CR_THRESHOLD:
-            flash(f"Tỷ số nhất quán (CR = {crit_cr:.4f}) vượt ngưỡng ({CR_THRESHOLD:.2f}). Vui lòng xem lại các so sánh tiêu chí.", "error")
+        # CR Check
+        # Allow CR to be None if RI could not be determined (ahp_weighting handles this)
+        cr_check_value = crit_cr if crit_cr is not None else 0.0 # Treat None CR as acceptable for this check
+
+        if cr_check_value > CR_THRESHOLD:
+            cr_display = f"{crit_cr:.4f}" if crit_cr is not None else "Không thể tính (RI không xác định)"
+            flash(f"Tỷ số nhất quán (CR = {cr_display}) vượt ngưỡng ({CR_THRESHOLD:.2f}). Vui lòng xem lại các so sánh tiêu chí.", "error")
             session['criteria_comparison_done'] = False
             if input_method == "form":
-                 session['form_data_crit'] = request.form
-            else:
-                 session.pop('form_data_crit', None)
+                 session['form_data_crit'] = request.form # Keep form data if manual input failed CR
+            # Keep intermediate results in session for display
             session.modified = True
             return redirect(url_for('compare_criteria'))
         else:
-            # --- CR is acceptable ---
-            flash(f"So sánh tiêu chí thành công (CR = {crit_cr:.4f}). Tiếp tục so sánh phương án.", "success")
+            # --- CR is acceptable (or None) ---
+            cr_display = f"{crit_cr:.4f}" if crit_cr is not None else "N/A (n<=2 hoặc RI không xác định)"
+            flash(f"So sánh tiêu chí thành công (CR = {cr_display}). Tiếp tục so sánh phương án.", "success")
             session['crit_weights'] = crit_weights.tolist()
             session['criteria_comparison_done'] = True
-            session.pop('form_data_crit', None)
+            session.pop('form_data_crit', None) # Clear form data on success
 
             # Initialize structures for alternative comparisons
             num_alternatives = len(session.get('session_alternatives', []))
+            if num_alternatives < MIN_ALTERNATIVES:
+                 flash("Lỗi: Số lượng phương án không đủ để tiếp tục.", "error")
+                 return redirect(url_for('select_alternatives'))
+
             session['alt_matrices_all'] = [None] * num_criteria
             session['alt_weights_all'] = [None] * num_criteria
             session['alt_lambda_max_all'] = [None] * num_criteria
@@ -606,25 +642,29 @@ def compare_criteria():
                            crit_cr=crit_cr,
                            crit_ri=crit_ri)
 
-
 @app.route("/compare_alternatives", methods=["GET", "POST"])
 def compare_alternatives():
     """Step 3: User compares alternatives for each criterion (manual or Excel)."""
     if not session.get('criteria_comparison_done'):
         flash("Vui lòng hoàn thành so sánh tiêu chí (với CR hợp lệ) trước.", "info")
         return redirect(url_for('compare_criteria'))
-    if 'session_alternatives' not in session or 'selected_criteria' not in session:
-        flash("Dữ liệu session bị thiếu (phương án/tiêu chí). Vui lòng bắt đầu lại.", "error")
-        return redirect(url_for('select_alternatives'))
 
-    selected_criteria = session['selected_criteria']
-    alternatives = session['session_alternatives']
+    # --- Retrieve and Validate Session Data ---
+    selected_criteria = session.get('selected_criteria', [])
+    alternatives = session.get('session_alternatives', [])
 
-    if not alternatives or len(alternatives) < MIN_ALTERNATIVES:
-         flash(f"Số lượng phương án không hợp lệ ({len(alternatives)}), cần ít nhất {MIN_ALTERNATIVES}.", "error")
+    # Validate Alternatives
+    if not alternatives or not isinstance(alternatives, list) or len(alternatives) < MIN_ALTERNATIVES or \
+       not all(isinstance(a, dict) and 'ten_phuong_an' in a for a in alternatives):
+         flash(f"Số lượng hoặc cấu trúc phương án không hợp lệ. Vui lòng bắt đầu lại.", "error")
+         clear_session_data()
          return redirect(url_for('select_alternatives'))
-    if not selected_criteria:
-         flash("Không có tiêu chí nào được chọn.", "error")
+
+    # Validate Criteria
+    if not selected_criteria or not isinstance(selected_criteria, list) or len(selected_criteria) < MIN_CRITERIA or \
+       not all(isinstance(c, dict) and 'ten_tieu_chi' in c for c in selected_criteria):
+         flash("Số lượng hoặc cấu trúc tiêu chí không hợp lệ. Vui lòng chọn lại tiêu chí.", "error")
+         clear_ahp_session_data()
          return redirect(url_for('select_criteria'))
 
     alternative_names = [a['ten_phuong_an'] for a in alternatives]
@@ -632,43 +672,66 @@ def compare_alternatives():
     num_criteria = len(selected_criteria)
     current_index = session.get('current_alt_criterion_index', 0)
 
+    # Check if comparisons are already done
     if current_index >= num_criteria:
         session['alternative_comparisons_done'] = True
         session.modified = True
         flash("Tất cả so sánh phương án đã hoàn thành.", "info")
-        return redirect(url_for('calculate_results'))
+        # Final check before results page
+        alt_weights_all = session.get('alt_weights_all')
+        if alt_weights_all and isinstance(alt_weights_all, list) and len(alt_weights_all) == num_criteria and \
+           all(item is not None for item in alt_weights_all):
+            return redirect(url_for('calculate_results'))
+        else:
+            flash("Dữ liệu so sánh phương án bị thiếu hoặc chưa hoàn chỉnh. Chuyển hướng về bước so sánh tiêu chí.", "warning")
+            print(f"DEBUG: Redirecting from compare_alternatives (index {current_index}>={num_criteria}) due to incomplete alt_weights_all: {alt_weights_all}")
+            session['current_alt_criterion_index'] = 0 # Reset index
+            session.pop('alternative_comparisons_done', None)
+            clear_temporary_alt_data(num_criteria) # Clear temp data
+            # Re-initialize permanent storage lists for safety before redirecting back
+            session['alt_matrices_all'] = [None] * num_criteria
+            session['alt_weights_all'] = [None] * num_criteria
+            session['alt_lambda_max_all'] = [None] * num_criteria
+            session['alt_ci_all'] = [None] * num_criteria
+            session['alt_cr_all'] = [None] * num_criteria
+            session['alt_ri_all'] = [None] * num_criteria
+            session.modified = True
+            return redirect(url_for('compare_criteria'))
 
     current_criterion = selected_criteria[current_index]
     alt_matrix = None
     input_method = "form"
 
     if request.method == "POST":
-         # Trust session index primarily
-         # Check for Excel file upload
-         if f'alternative_excel_file_{current_index}' in request.files:
-             file = request.files[f'alternative_excel_file_{current_index}']
+         file_key = f'alternative_excel_file_{current_index}'
+         if file_key in request.files:
+             file = request.files[file_key]
              if file and file.filename != '':
-                # filename = secure_filename(file.filename) # Not needed
                 alt_matrix, error_msg = parse_excel_matrix(file, num_alternatives, alternative_names)
                 if error_msg:
                     flash(f"Lỗi xử lý file Excel cho tiêu chí '{current_criterion['ten_tieu_chi']}': {error_msg}", "error")
                     session.pop('form_data_alt', None)
-                    clear_temporary_alt_data_for_index(current_index) # Clear temp results
+                    clear_temporary_alt_data_for_index(current_index)
                     session.modified = True
                     return redirect(url_for('compare_alternatives'))
                 elif alt_matrix is not None:
                      input_method = "excel"
                      flash(f"Đã nhập ma trận so sánh phương án cho '{current_criterion['ten_tieu_chi']}' từ file Excel.", "info")
+                     session.pop('form_data_alt', None) # Clear form data if excel used
 
-         # If no valid matrix from Excel, try form data
-         if alt_matrix is None:
-            input_method = "form"
+         if alt_matrix is None: # If Excel not used or failed
             prefix = f"alt_pc_{current_index}"
-            alt_matrix = compute_pairwise_matrix(prefix, alternative_names, request.form)
+            form_keys_present = any(key.startswith(prefix) for key in request.form)
+            if not form_keys_present and input_method == "form":
+                flash(f"Vui lòng nhập giá trị so sánh thủ công cho '{current_criterion['ten_tieu_chi']}' hoặc tải lên file Excel.", "warning")
+                return redirect(url_for('compare_alternatives'))
+            # If input_method is 'excel' but matrix is None, parse_excel_matrix failed earlier
 
+            input_method = "form"
+            alt_matrix = compute_pairwise_matrix(prefix, alternative_names, request.form)
             if alt_matrix is None:
-                session['form_data_alt'] = request.form
-                clear_temporary_alt_data_for_index(current_index) # Clear temp results
+                session['form_data_alt'] = request.form # Preserve form data
+                clear_temporary_alt_data_for_index(current_index)
                 session.modified = True
                 return redirect(url_for('compare_alternatives'))
 
@@ -678,7 +741,7 @@ def compare_alternatives():
          if alt_weights is None:
              if input_method == "form":
                   session['form_data_alt'] = request.form
-             clear_temporary_alt_data_for_index(current_index) # Clear temp results
+             clear_temporary_alt_data_for_index(current_index)
              session.modified = True
              return redirect(url_for('compare_alternatives'))
 
@@ -687,67 +750,87 @@ def compare_alternatives():
          session[f'temp_alt_lambda_max_{current_index}'] = alt_lambda_max
          session[f'temp_alt_ci_{current_index}'] = alt_ci
          session[f'temp_alt_cr_{current_index}'] = alt_cr
-         session[f'temp_alt_ri_{current_index}'] = alt_ri
+         session[f'temp_alt_ri_{current_index}'] = alt_ri # Can be None
+         session.modified = True # Save temp results
 
-         if alt_cr > CR_THRESHOLD:
-             flash(f"CR cho phương án theo '{current_criterion['ten_tieu_chi']}' ({alt_cr:.4f}) > {CR_THRESHOLD:.2f}. Vui lòng xem lại.", "error")
+         # CR Check (Allow None CR)
+         cr_check_value = alt_cr if alt_cr is not None else 0.0
+
+         if cr_check_value > CR_THRESHOLD:
+             cr_display = f"{alt_cr:.4f}" if alt_cr is not None else "Không thể tính"
+             flash(f"CR cho phương án theo '{current_criterion['ten_tieu_chi']}' ({cr_display}) > {CR_THRESHOLD:.2f}. Vui lòng xem lại.", "error")
              session['alternative_comparisons_done'] = False
              if input_method == "form":
-                  session['form_data_alt'] = request.form
-             else:
-                  session.pop('form_data_alt', None)
-             session.modified = True
+                  session['form_data_alt'] = request.form # Keep form data
              # Keep temp results, redirect back to the same criterion page
+             session.modified = True
              return redirect(url_for('compare_alternatives'))
          else:
              # --- Consistent! Store results permanently ---
-             flash(f"So sánh phương án theo '{current_criterion['ten_tieu_chi']}' đã lưu (CR = {alt_cr:.4f}).", "success")
+             cr_display = f"{alt_cr:.4f}" if alt_cr is not None else "N/A"
+             flash(f"So sánh phương án theo '{current_criterion['ten_tieu_chi']}' đã lưu (CR = {cr_display}).", "success")
 
              def ensure_session_list(key, length, default_val=None):
-                 # Ensure list exists and has correct length before assigning
+                 """ Ensures a session list exists with the correct length. """
                  data = session.get(key)
+                 # Check type, length, and if it contains only the default value (or expected values)
                  if not isinstance(data, list) or len(data) != length:
-                     session[key] = [default_val] * length
-                 return session[key]
+                    session[key] = [default_val] * length
+                    print(f"DEBUG: Reinitialized session list '{key}' with length {length}")
+                    session.modified = True # Mark modified when reinitializing
+                 # No return needed, modifies session directly
 
-             alt_matrices_all = ensure_session_list('alt_matrices_all', num_criteria, default_val=[])
-             alt_weights_all = ensure_session_list('alt_weights_all', num_criteria)
-             alt_lambda_max_all = ensure_session_list('alt_lambda_max_all', num_criteria)
-             alt_ci_all = ensure_session_list('alt_ci_all', num_criteria)
-             alt_cr_all = ensure_session_list('alt_cr_all', num_criteria)
-             alt_ri_all = ensure_session_list('alt_ri_all', num_criteria)
+             # Ensure permanent lists exist before assignment
+             ensure_session_list('alt_matrices_all', num_criteria, default_val=None)
+             ensure_session_list('alt_weights_all', num_criteria, default_val=None)
+             ensure_session_list('alt_lambda_max_all', num_criteria, default_val=None)
+             ensure_session_list('alt_ci_all', num_criteria, default_val=None)
+             ensure_session_list('alt_cr_all', num_criteria, default_val=None)
+             ensure_session_list('alt_ri_all', num_criteria, default_val=None)
 
-             # Store permanent results using validated lists
-             session['alt_matrices_all'][current_index] = alt_matrix.tolist()
-             session['alt_weights_all'][current_index] = alt_weights.tolist()
-             session['alt_lambda_max_all'][current_index] = alt_lambda_max
-             session['alt_ci_all'][current_index] = alt_ci
-             session['alt_cr_all'][current_index] = alt_cr
-             session['alt_ri_all'][current_index] = alt_ri
+             # Store permanent results (use .get to be safe, though ensure_session_list should guarantee existence)
+             try:
+                 session.get('alt_matrices_all', [])[current_index] = alt_matrix.tolist()
+                 session.get('alt_weights_all', [])[current_index] = alt_weights.tolist()
+                 session.get('alt_lambda_max_all', [])[current_index] = alt_lambda_max
+                 session.get('alt_ci_all', [])[current_index] = alt_ci
+                 session.get('alt_cr_all', [])[current_index] = alt_cr
+                 session.get('alt_ri_all', [])[current_index] = alt_ri
+                 session.modified = True # Crucial: Mark session modified after updates
+             except IndexError:
+                 flash(f"Lỗi nghiêm trọng: Không thể lưu kết quả vào session tại chỉ số {current_index}.", "error")
+                 print(f"DEBUG: IndexError accessing session lists at index {current_index}.")
+                 clear_session_data()
+                 return redirect(url_for('select_alternatives'))
 
              # Clear temporary data for this index and general form data
              clear_temporary_alt_data_for_index(current_index)
-             session.pop('form_data_alt', None)
+             session.pop('form_data_alt', None) # Clear form data for this step
 
              # Move to the next criterion
              next_index = current_index + 1
              session['current_alt_criterion_index'] = next_index
-             session.modified = True
+             session.modified = True # Save the updated index
 
              if next_index >= num_criteria:
                  session['alternative_comparisons_done'] = True
+                 session.modified = True
                  return redirect(url_for('calculate_results'))
              else:
-                 return redirect(url_for('compare_alternatives')) # Redirect to GET for next
+                 # Redirect to GET for the next criterion comparison
+                 return redirect(url_for('compare_alternatives'))
 
     # --- GET request ---
-    form_data = session.get('form_data_alt', None)
+    # Retrieve temporary results for display if previous POST failed CR check
+    form_data = session.get('form_data_alt', None) # Retrieve stored form data
     alt_lambda_max = session.get(f'temp_alt_lambda_max_{current_index}')
     alt_ci = session.get(f'temp_alt_ci_{current_index}')
     alt_cr = session.get(f'temp_alt_cr_{current_index}')
     alt_ri = session.get(f'temp_alt_ri_{current_index}')
 
-    # Clear general form data after retrieving it for display
+    # *** Important: Clear general form data AFTER retrieving it for display
+    # But DO NOT clear the temp_* results here, they are needed by the template if CR failed.
+    # They will be cleared naturally when the user successfully submits for this index or moves on.
     if 'form_data_alt' in session:
          session.pop('form_data_alt')
          session.modified = True
@@ -756,8 +839,8 @@ def compare_alternatives():
                            criterion=current_criterion,
                            alternatives=alternatives,
                            alternative_names=alternative_names,
-                           form_data=form_data,
-                           alt_lambda_max=alt_lambda_max,
+                           form_data=form_data, # Pass potentially stored form data
+                           alt_lambda_max=alt_lambda_max, # Pass temp results
                            alt_ci=alt_ci,
                            alt_cr=alt_cr,
                            alt_ri=alt_ri,
@@ -773,124 +856,140 @@ def calculate_results():
         flash("So sánh tiêu chí chưa hoàn thành hoặc CR không hợp lệ.", "warning")
         return redirect(url_for('compare_criteria'))
 
+    # --- Ensure alternative comparisons are marked as done ---
     num_criteria = len(session.get('selected_criteria', []))
-    num_alternatives = len(session.get('session_alternatives', []))
-    current_alt_index = session.get('current_alt_criterion_index', -1)
-
+    current_alt_index = session.get('current_alt_criterion_index', 0) # Default to 0 if key missing
     if not session.get('alternative_comparisons_done'):
-        if current_alt_index == num_criteria and num_criteria > 0:
-             session['alternative_comparisons_done'] = True
-             session.modified = True
+        # Check if index is actually past the end
+        if current_alt_index >= num_criteria:
+            session['alternative_comparisons_done'] = True # Mark as done if index is validly past the end
+            session.modified = True
         else:
-             flash(f"So sánh phương án chưa hoàn thành (đang ở tiêu chí {current_alt_index+1}/{num_criteria}).", "warning")
-             return redirect(url_for('compare_alternatives'))
+            flash(f"So sánh phương án chưa hoàn thành (đang ở tiêu chí {current_alt_index+1}/{num_criteria}).", "warning")
+            return redirect(url_for('compare_alternatives'))
 
-    required_keys = [
-        'crit_weights', 'alt_weights_all', 'session_alternatives', 'selected_criteria',
-        'crit_matrix', 'crit_lambda_max', 'crit_ci', 'crit_cr', 'crit_ri',
-        'alt_matrices_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all',
-        'all_db_alternatives', 'all_db_criteria'
-    ]
+    # --- Deep Validation of Required Session Data ---
+    # (Giữ nguyên khối validation này, nó rất quan trọng)
+    num_alternatives = len(session.get('session_alternatives', []))
+    required_keys = {
+        'crit_weights': (list, num_criteria), 'alt_weights_all': (list, num_criteria),
+        'session_alternatives': (list, num_alternatives), 'selected_criteria': (list, num_criteria),
+        'crit_matrix': (list, num_criteria), 'crit_lambda_max': ((float, int), None),
+        'crit_ci': ((float, int), None), 'crit_cr': ((float, int, type(None)), None), # Allow None
+        'crit_ri': ((float, int, type(None)), None), # Allow None
+        'alt_matrices_all': (list, num_criteria), 'alt_lambda_max_all': (list, num_criteria),
+        'alt_ci_all': (list, num_criteria), 'alt_cr_all': (list, num_criteria),
+        'alt_ri_all': (list, num_criteria),
+        'all_db_alternatives': (bool, None), 'all_db_criteria': (bool, None)
+    }
     missing_or_invalid = []
-    for key in required_keys:
+    for key, (expected_type, expected_len) in required_keys.items():
         data = session.get(key)
-        if data is None:
-            missing_or_invalid.append(f"'{key}' is missing")
+        is_optional_none = key in ['crit_cr', 'crit_ri'] and data is None
+        if data is None and not is_optional_none:
+            missing_or_invalid.append(f"Thiếu '{key}'")
             continue
-        if key.startswith('alt_') and key.endswith('_all'):
-             if not isinstance(data, list) or len(data) != num_criteria:
-                 missing_or_invalid.append(f"'{key}' has incorrect length (found {len(data) if isinstance(data, list) else 'N/A'}, expected {num_criteria})")
-             elif any(x is None for x in data):
-                  missing_indices = [i for i, x in enumerate(data) if x is None]
-                  missing_or_invalid.append(f"'{key}' has missing data at indices: {missing_indices}")
+        if data is not None: # Check type only if data exists
+            if isinstance(expected_type, tuple):
+                if not isinstance(data, expected_type):
+                    type_names = ', '.join(t.__name__ for t in expected_type)
+                    missing_or_invalid.append(f"'{key}' sai kiểu (cần {type_names}, tìm thấy {type(data).__name__})")
+            elif not isinstance(data, expected_type):
+                missing_or_invalid.append(f"'{key}' sai kiểu (cần {expected_type.__name__}, tìm thấy {type(data).__name__})")
+
+        if expected_len is not None and isinstance(data, list):
+            if len(data) != expected_len:
+                 missing_or_invalid.append(f"'{key}' sai độ dài (cần {expected_len}, tìm thấy {len(data)})")
+            elif key.endswith('_all') and any(item is None for item in data): # Check for None placeholders in _all lists
+                 missing_indices = [i for i, item in enumerate(data) if item is None]
+                 missing_or_invalid.append(f"'{key}' thiếu dữ liệu tại chỉ số: {missing_indices}")
 
     if missing_or_invalid:
-        error_message = "Dữ liệu session không đầy đủ/hợp lệ để tính kết quả: " + "; ".join(missing_or_invalid) + ". Vui lòng thử lại."
+        error_message = "Dữ liệu session không đầy đủ/hợp lệ để tính kết quả: " + "; ".join(missing_or_invalid) + ". Vui lòng thử lại từ đầu."
         flash(error_message, "error")
-        if any('alt_' in s for s in missing_or_invalid): return redirect(url_for('compare_alternatives'))
-        elif any('crit_' in s for s in missing_or_invalid): return redirect(url_for('compare_criteria'))
-        else: return redirect(url_for('clear_session_and_start'))
+        print("DEBUG: Session validation failed in calculate_results:", missing_or_invalid)
+        clear_session_data()
+        return redirect(url_for('select_alternatives'))
 
     # --- Perform Final Calculation ---
+    final_scores_dict = {}
+    results_display = []
+    best_alternative_info = None
+    calculation_error = None
+
     try:
-        crit_weights = np.array(session['crit_weights'])
+        crit_weights = np.array(session['crit_weights'], dtype=float)
         alt_weights_all_list = session['alt_weights_all']
-        alt_weights_matrix = np.array(alt_weights_all_list).T
+        alt_weights_matrix = np.array(alt_weights_all_list, dtype=float).T
 
-        if crit_weights.shape != (num_criteria,):
-            raise ValueError(f"Kích thước trọng số tiêu chí không đúng ({crit_weights.shape}), cần ({num_criteria},)")
-        if alt_weights_matrix.shape != (num_alternatives, num_criteria):
-             raise ValueError(f"Kích thước ma trận trọng số PA sau chuyển vị không đúng ({alt_weights_matrix.shape}), cần ({num_alternatives}, {num_criteria})")
+        if crit_weights.shape != (num_criteria,): raise ValueError(f"Kích thước trọng số tiêu chí sai ({crit_weights.shape})")
+        if alt_weights_matrix.shape != (num_alternatives, num_criteria): raise ValueError(f"Kích thước ma trận trọng số PA sai ({alt_weights_matrix.shape})")
         if np.isnan(crit_weights).any() or np.isinf(crit_weights).any(): raise ValueError("NaN/Inf trong trọng số tiêu chí.")
-        if np.isnan(alt_weights_matrix).any() or np.isinf(alt_weights_matrix).any(): raise ValueError("NaN/Inf trong ma trận trọng số phương án.")
-        if abs(np.sum(crit_weights) - 1.0) > 1e-5: flash(f"Cảnh báo: Tổng trọng số tiêu chí ~ {np.sum(crit_weights):.6f} (nên bằng 1).", "warning")
+        if np.isnan(alt_weights_matrix).any() or np.isinf(alt_weights_matrix).any(): raise ValueError("NaN/Inf trong ma trận trọng số PA.")
 
-        # --- Final Score Calculation ---
+        if abs(np.sum(crit_weights) - 1.0) > 1e-4: flash(f"Cảnh báo: Tổng trọng số tiêu chí ~ {np.sum(crit_weights):.6f}", "warning")
+        col_sums = np.sum(alt_weights_matrix, axis=0)
+        if not np.allclose(col_sums, 1.0, atol=1e-4):
+             bad_cols = np.where(np.abs(col_sums - 1.0) > 1e-4)[0]
+             flash(f"Cảnh báo: Tổng trọng số PA theo cột tiêu chí không bằng 1 (lỗi ở cột chỉ số: {bad_cols}, tổng: {col_sums[bad_cols]:.4f}).", "warning")
+
         final_scores_vector = np.dot(alt_weights_matrix, crit_weights)
 
-        if final_scores_vector.shape != (num_alternatives,):
-            raise ValueError(f"Kích thước vector điểm cuối cùng không đúng ({final_scores_vector.shape}), cần ({num_alternatives},)")
-        if abs(np.sum(final_scores_vector) - 1.0) > 1e-5:
-             flash(f"Cảnh báo: Tổng điểm cuối cùng ~ {np.sum(final_scores_vector):.6f} (nên bằng 1).", "warning")
+        if final_scores_vector.shape != (num_alternatives,): raise ValueError(f"Kích thước vector điểm cuối sai ({final_scores_vector.shape})")
+        if abs(np.sum(final_scores_vector) - 1.0) > 1e-4: flash(f"Cảnh báo: Tổng điểm cuối cùng ~ {np.sum(final_scores_vector):.6f}", "warning")
 
-        # --- Prepare results for display ---
         alternatives_session = session['session_alternatives']
-        final_scores_dict = {
-            alt['ten_phuong_an']: score for alt, score in zip(alternatives_session, final_scores_vector)
-        }
-        best_alternative_name = max(final_scores_dict, key=final_scores_dict.get) if final_scores_dict else None
+        final_scores_python = [float(score) for score in final_scores_vector] # Convert to Python floats
 
-        results_display = []
-        best_alternative_info = None
-        if alternatives_session and final_scores_dict:
+        if alternatives_session and len(final_scores_python) == len(alternatives_session):
+            final_scores_dict = { alt['ten_phuong_an']: score for alt, score in zip(alternatives_session, final_scores_python) }
+            best_alternative_name = max(final_scores_dict, key=final_scores_dict.get) if final_scores_dict else None
+
             for i, alt in enumerate(alternatives_session):
                 alt_name = alt['ten_phuong_an']
-                score = final_scores_vector[i]
+                score = final_scores_python[i]
                 is_best = (alt_name == best_alternative_name)
-                display_item = {
-                    'id': alt.get('id'),
-                    'name': alt_name,
-                    'score': score,
-                    'is_best': is_best
-                }
+                display_item = {'id': alt.get('id'), 'name': alt_name, 'score': score, 'is_best': is_best}
                 results_display.append(display_item)
-                if is_best:
-                    best_alternative_info = display_item
+                if is_best: best_alternative_info = display_item
 
             results_display.sort(key=lambda x: x['score'], reverse=True)
+            session['final_scores'] = final_scores_dict
+            session['best_alternative_info'] = best_alternative_info
+            session.modified = True
 
-        session['final_scores'] = final_scores_dict
-        session['best_alternative_info'] = best_alternative_info
-        session.modified = True
+        else:
+             raise ValueError("Số lượng điểm cuối cùng không khớp với số lượng phương án trong session.")
 
     except (ValueError, TypeError, IndexError) as e:
-         flash(f"Lỗi trong quá trình tính toán cuối cùng: {e}", "error")
+         calculation_error = f"Lỗi trong quá trình tính toán cuối cùng: {e}"
+         flash(calculation_error, "error")
          print(f"Final Calculation Error Details: {e}"); traceback.print_exc()
-         intermediate_results = get_intermediate_results_for_display()
-         return render_template("results.html", error=f"Lỗi tính toán: {e}", intermediate=intermediate_results)
+         # results_display will be empty or incomplete
     except Exception as e:
-         flash(f"Đã xảy ra lỗi không mong muốn trong quá trình tính toán cuối cùng: {e}.", "error")
+         calculation_error = f"Đã xảy ra lỗi không mong muốn trong quá trình tính toán cuối cùng: {e}"
+         flash(calculation_error, "error")
          print(f"Unexpected Final Calculation Error: {e}"); traceback.print_exc()
-         return render_template("error.html", message=f"Lỗi không mong muốn: {e}")
+         # results_display will be empty or incomplete
 
 
-    # --- Save results to database ---
+    # --- Save results to database (Only if calculation was successful) ---
     can_save_to_db = session.get('all_db_alternatives', False) and session.get('all_db_criteria', False)
     save_attempted = False
     save_successful = False
 
-    if can_save_to_db and results_display:
+    # Chỉ thử lưu nếu không có lỗi tính toán VÀ có kết quả để hiển thị VÀ có thể lưu
+    if not calculation_error and can_save_to_db and results_display:
         save_attempted = True
-        conn = get_connection() # Get a new connection for the transaction
+        conn = get_connection()
         if conn:
             analysis_group_id = str(uuid.uuid4())
             timestamp = datetime.now()
-            try:
-                with conn.cursor() as cursor: # Default cursor is fine for inserts
-                    # Start transaction implicitly with first execute, or explicitly:
-                    # conn.autocommit = False # Ensure we control commit/rollback
+            length_mismatch_db = False # Cờ kiểm tra lỗi khớp độ dài khi lưu DB
 
-                    # 1. Insert alternative scores
+            try:
+                with conn.cursor() as cursor:
+                    # --- Prepare Alternatives for DB ---
                     insert_alt_query = """
                         INSERT INTO ket_qua (analysis_group_id, thoi_gian, phuong_an_id, phuong_an_ten,
                                              tieu_chi_id, tieu_chi_ten, is_alternative, is_db_source,
@@ -899,18 +998,14 @@ def calculate_results():
                     """
                     alt_values_to_insert = []
                     for result in results_display:
-                         if result['id'] is not None: # Only save DB alternatives
-                             alt_values_to_insert.append((
-                                 analysis_group_id, timestamp, result['id'], result['name'],
-                                 result['score'], result['is_best']
-                             ))
-                    if alt_values_to_insert:
-                        # Use execute_values for potential performance gain if psycopg2 > 2.7
-                        # psycopg2.extras.execute_values(cursor, insert_alt_query, alt_values_to_insert)
-                        # Or stick to executemany for broader compatibility:
-                         cursor.executemany(insert_alt_query, alt_values_to_insert)
+                         alt_id = result['id']
+                         alt_name = result['name']
+                         final_score = result['score'] # Should be float
+                         is_best = result['is_best']   # Should be bool
+                         if alt_id is not None: # Only save DB alternatives
+                             alt_values_to_insert.append((analysis_group_id, timestamp, alt_id, alt_name, final_score, is_best))
 
-                    # 2. Insert criteria weights
+                    # --- Prepare Criteria for DB ---
                     insert_crit_query = """
                         INSERT INTO ket_qua (analysis_group_id, thoi_gian, phuong_an_id, phuong_an_ten,
                                              tieu_chi_id, tieu_chi_ten, is_alternative, is_db_source,
@@ -918,55 +1013,146 @@ def calculate_results():
                         VALUES (%s, %s, NULL, '', %s, %s, FALSE, TRUE, NULL, NULL, %s)
                     """
                     crit_values_to_insert = []
-                    db_criteria = session['selected_criteria']
-                    db_crit_weights = session['crit_weights']
-                    for i, crit in enumerate(db_criteria):
-                        if crit.get('id') is not None: # Only save DB criteria
-                             crit_values_to_insert.append((
-                                 analysis_group_id, timestamp, crit['id'], crit['ten_tieu_chi'],
-                                 db_crit_weights[i]
-                             ))
-                    if crit_values_to_insert:
-                        cursor.executemany(insert_crit_query, crit_values_to_insert)
+                    # Sử dụng get với default là list rỗng để an toàn hơn
+                    db_criteria = session.get('selected_criteria', [])
+                    db_crit_weights_list = session.get('crit_weights', [])
 
-                    # Only commit if both inserts seemed okay (had data)
-                    if alt_values_to_insert and crit_values_to_insert:
-                        conn.commit() # <--- Commit transaction
-                        save_successful = True
-                        flash("Kết quả phân tích đã được lưu vào cơ sở dữ liệu.", "success")
+                    # Kiểm tra khớp độ dài một cách cẩn thận
+                    if len(db_criteria) == len(db_crit_weights_list):
+                        for i, crit in enumerate(db_criteria):
+                            crit_id = crit.get('id')
+                            crit_name = crit.get('ten_tieu_chi')
+                            # Đảm bảo trọng số là float
+                            try:
+                                crit_weight = float(db_crit_weights_list[i])
+                            except (ValueError, TypeError):
+                                flash(f"Lỗi kiểu dữ liệu trọng số tiêu chí '{crit_name}'. Bỏ qua lưu tiêu chí này.", "warning")
+                                continue # Bỏ qua tiêu chí này nếu trọng số không hợp lệ
+
+                            if crit_id is not None: # Chỉ lưu tiêu chí DB
+                                 crit_values_to_insert.append((analysis_group_id, timestamp, crit_id, crit_name, crit_weight))
                     else:
-                         conn.rollback() # Rollback if nothing to insert
-                         flash("Không có dữ liệu hợp lệ để lưu vào cơ sở dữ liệu.", "warning")
+                        length_mismatch_db = True # Đặt cờ lỗi
+                        err_msg = f"Lỗi nghiêm trọng khi lưu DB: Số lượng tiêu chí ({len(db_criteria)}) và trọng số ({len(db_crit_weights_list)}) không khớp."
+                        flash(err_msg, "error")
+                        print(f"ERROR DB SAVE: {err_msg}")
 
+                    # --- Execute Inserts and Commit/Rollback ---
+                    # print(f"DEBUG DB SAVE: Alt values count: {len(alt_values_to_insert)}, Crit values count: {len(crit_values_to_insert)}, Length mismatch: {length_mismatch_db}")
+
+                    db_insert_error = None # Biến để lưu lỗi insert nếu có
+
+                    # Insert alternatives if available
+                    if alt_values_to_insert:
+                       try:
+                           cursor.executemany(insert_alt_query, alt_values_to_insert)
+                           # print("DEBUG DB SAVE: Executed alternative insert.")
+                       except psycopg2.Error as alt_err:
+                           db_insert_error = f"Lỗi khi chèn điểm phương án: {alt_err}"
+                           print(f"ERROR DB SAVE (Alternatives): {db_insert_error}")
+
+                    # Insert criteria if available AND no length mismatch AND no prior insert error
+                    if crit_values_to_insert and not length_mismatch_db and not db_insert_error:
+                        try:
+                           cursor.executemany(insert_crit_query, crit_values_to_insert)
+                           # print("DEBUG DB SAVE: Executed criteria insert.")
+                        except psycopg2.Error as crit_err:
+                            db_insert_error = f"Lỗi khi chèn trọng số tiêu chí: {crit_err}"
+                            print(f"ERROR DB SAVE (Criteria): {db_insert_error}")
+
+
+                    # Commit logic: Commit only if no insertion errors occurred AND no length mismatch
+                    # AND both lists actually contained data (as required by can_save_to_db).
+                    if not db_insert_error and not length_mismatch_db and alt_values_to_insert and crit_values_to_insert:
+                       # print("DEBUG DB SAVE: Committing transaction...")
+                       conn.commit()
+                       save_successful = True
+                       flash("Kết quả phân tích (phương án và tiêu chí) đã được lưu vào cơ sở dữ liệu.", "success")
+                    else:
+                       # Rollback if any error occurred or if lists were empty unexpectedly
+                       # print("DEBUG DB SAVE: Rolling back transaction...")
+                       conn.rollback()
+                       save_successful = False
+                       # Provide specific feedback for rollback reason
+                       if db_insert_error:
+                            flash(f"Lưu vào DB thất bại do lỗi: {db_insert_error}", "error")
+                       elif length_mismatch_db:
+                           flash("Lưu vào DB thất bại do lỗi không khớp giữa số lượng tiêu chí và trọng số.", "error") # Đã flash ở trên
+                       elif not alt_values_to_insert:
+                           flash("Lưu vào DB thất bại: Không có dữ liệu điểm phương án hợp lệ (từ DB) để lưu.", "warning")
+                       elif not crit_values_to_insert:
+                           # Vì can_save_to_db=True, việc này không nên xảy ra trừ khi tất cả tiêu chí DB bị lỗi get('id')
+                           flash("Lưu vào DB thất bại: Không có dữ liệu trọng số tiêu chí hợp lệ (từ DB) để lưu.", "warning")
+                       else:
+                            flash("Lưu vào DB thất bại. Giao dịch đã được rollback.", "warning") # Fallback
 
             except (psycopg2.Error, Exception) as e:
-                if conn: conn.rollback() # <--- Rollback on error
-                flash(f"Lỗi lưu kết quả vào cơ sở dữ liệu: {e}", "error")
-                print(f"DB Save Error: {e}"); traceback.print_exc()
-                save_successful = False # Ensure it's false on error
+                if conn: conn.rollback()
+                flash(f"Lỗi trong quá trình lưu vào cơ sở dữ liệu: {e}", "error")
+                print(f"DB Save Error (Outer Try): {e}"); traceback.print_exc()
+                save_successful = False
             finally:
                 if conn: conn.close()
         else:
-            flash("Không thể kết nối đến cơ sở dữ liệu để lưu kết quả.", "error")
-            save_attempted = True
-            save_successful = False
+            # get_connection failed
+            save_attempted = True # Vẫn đánh dấu đã cố gắng
+            save_successful = False # Nhưng thất bại
+            # Lỗi đã được flash bởi get_connection
 
-    elif not can_save_to_db:
+    elif not can_save_to_db and not calculation_error:
         flash("Kết quả được tính toán nhưng không lưu vào DB vì sử dụng phương án hoặc tiêu chí tùy chỉnh.", "info")
-    elif not results_display:
-        flash("Không có kết quả cuối cùng để tính toán hoặc lưu.", "info")
-
+    elif not results_display and not calculation_error:
+        flash("Không có kết quả cuối cùng để hiển thị hoặc lưu.", "warning")
+    # Nếu có calculation_error, không cần flash gì thêm về việc lưu DB.
 
     # --- Prepare Intermediate Results for Display ---
-    intermediate_results = get_intermediate_results_for_display()
+    intermediate_results = get_intermediate_results_for_display() # Lấy dữ liệu trung gian
 
     return render_template("results.html",
-                           results=results_display,
+                           results=results_display, # Sẽ rỗng nếu có lỗi tính toán
                            intermediate=intermediate_results,
-                           best_alternative_info=best_alternative_info,
+                           best_alternative_info=best_alternative_info, # Sẽ None nếu có lỗi
                            save_attempted=save_attempted,
                            save_successful=save_successful,
-                           can_save_to_db=can_save_to_db)
+                           can_save_to_db=can_save_to_db,
+                           error=calculation_error) # Truyền lỗi tính toán vào template
+
+# --- get_intermediate_results_for_display (Giữ nguyên) ---
+def get_intermediate_results_for_display():
+    """Safely retrieves intermediate results from session for the results page."""
+    intermediate = {}
+    try:
+        crit_keys = ['selected_criteria', 'crit_matrix', 'crit_weights', 'crit_lambda_max', 'crit_ci', 'crit_cr', 'crit_ri']
+        alt_keys = ['session_alternatives', 'alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all']
+        for key in crit_keys + alt_keys:
+            intermediate[key] = session.get(key)
+
+        # Basic validation after retrieving all
+        num_crit_check = len(intermediate.get('selected_criteria', [])) if isinstance(intermediate.get('selected_criteria'), list) else 0
+        num_alt_check = len(intermediate.get('session_alternatives', [])) if isinstance(intermediate.get('session_alternatives'), list) else 0
+        alt_lists_to_check = ['alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all']
+
+        for key in alt_lists_to_check:
+            data = intermediate.get(key)
+            if not isinstance(data, list):
+                 flash(f"Cảnh báo hiển thị: Dữ liệu trung gian '{key}' không phải là list.", "warning")
+                 intermediate[key] = [None] * num_crit_check # Cố gắng tạo list rỗng
+            elif len(data) != num_crit_check:
+                 flash(f"Cảnh báo hiển thị: Dữ liệu trung gian '{key}' độ dài ({len(data)}) không khớp số tiêu chí ({num_crit_check}).", "warning")
+                 # Pad with None if too short, or truncate if too long (less ideal but prevents crashes)
+                 intermediate[key] = (data + [None] * num_crit_check)[:num_crit_check]
+            elif any(item is None for item in data): # Check for None placeholders within the list
+                 missing_indices = [i for i, item in enumerate(data) if item is None]
+                 # Chỉ flash cảnh báo nếu nó thực sự thiếu (không phải None do lỗi CR/RI)
+                 if key not in ['alt_cr_all', 'alt_ri_all']:
+                      flash(f"Cảnh báo hiển thị: Dữ liệu trung gian '{key}' còn thiếu sót ở chỉ số: {missing_indices}.", "warning")
+
+    except Exception as e:
+         flash(f"Lỗi khi chuẩn bị dữ liệu trung gian để hiển thị: {e}", "warning")
+         print(f"Error preparing intermediate results: {e}")
+         traceback.print_exc()
+         intermediate = {}
+    return intermediate
 
 
 @app.route("/results_history")
@@ -975,7 +1161,6 @@ def results_history():
     grouped_history = {}
     db_error = None
 
-    # Use execute_query helper
     group_query = """
         SELECT DISTINCT analysis_group_id, MAX(thoi_gian) as analysis_time
         FROM ket_qua
@@ -988,9 +1173,12 @@ def results_history():
 
     if analysis_groups is None:
         db_error = "Lỗi lấy danh sách nhóm phân tích từ lịch sử."
-        analysis_groups = [] # Ensure it's iterable
+        analysis_groups = []
+    elif not analysis_groups:
+        # Không có lỗi nhưng không có nhóm nào -> không cần làm gì thêm
+        pass
 
-    conn_hist = get_connection() # Need a persistent connection for multiple queries
+    conn_hist = get_connection()
     if conn_hist and analysis_groups:
         try:
             with conn_hist.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
@@ -1005,7 +1193,7 @@ def results_history():
                         'criteria': []
                     }
 
-                    # Get alternative results for this group
+                    # Get alternatives for this group
                     alt_hist_query = """
                         SELECT phuong_an_ten, final_score, is_best
                         FROM ket_qua
@@ -1013,9 +1201,9 @@ def results_history():
                         ORDER BY final_score DESC
                     """
                     cursor.execute(alt_hist_query, (group_id,))
-                    group_data['alternatives'] = cursor.fetchall()
+                    group_data['alternatives'] = [dict(row) for row in cursor.fetchall()]
 
-                    # Get criteria weights for this group
+                    # Get criteria for this group
                     crit_hist_query = """
                         SELECT tieu_chi_ten, criterion_weight
                         FROM ket_qua
@@ -1023,8 +1211,9 @@ def results_history():
                         ORDER BY criterion_weight DESC
                     """
                     cursor.execute(crit_hist_query, (group_id,))
-                    group_data['criteria'] = cursor.fetchall()
+                    group_data['criteria'] = [dict(row) for row in cursor.fetchall()] # Sẽ là list rỗng nếu không tìm thấy
 
+                    # Chỉ thêm nếu có dữ liệu phương án hoặc tiêu chí
                     if group_data['alternatives'] or group_data['criteria']:
                          grouped_history[group_id] = group_data
 
@@ -1033,96 +1222,16 @@ def results_history():
              flash(db_error, "error"); print(f"DB History Detail Error: {e}"); traceback.print_exc()
         finally:
             if conn_hist: conn_hist.close()
-    elif not conn_hist:
+    elif not conn_hist and analysis_groups:
          db_error = "Không thể kết nối DB để lấy chi tiết lịch sử."
          flash(db_error, "error")
-
 
     sorted_history_list = sorted(grouped_history.values(), key=lambda item: item['timestamp_obj'], reverse=True)
 
     return render_template("results_history.html", history_list=sorted_history_list, db_error=db_error)
 
 
-# --- Helper Functions --- (Largely unchanged, but added clear logic)
-
-def get_intermediate_results_for_display():
-    """Safely retrieves intermediate results from session for the results page."""
-    intermediate = {}
-    try:
-        # Define keys expected in session
-        crit_keys = ['selected_criteria', 'crit_matrix', 'crit_weights', 'crit_lambda_max', 'crit_ci', 'crit_cr', 'crit_ri']
-        alt_keys = ['session_alternatives', 'alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all']
-
-        for key in crit_keys + alt_keys:
-            intermediate[key] = session.get(key) # Use get to avoid KeyError
-
-        # Perform basic validation after retrieving all
-        num_crit_check = len(intermediate.get('selected_criteria', []))
-        alt_lists_to_check = ['alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all']
-
-        valid = True
-        for key in alt_lists_to_check:
-            data = intermediate.get(key)
-            if not isinstance(data, list) or len(data) != num_crit_check:
-                 flash(f"Cảnh báo hiển thị: Dữ liệu '{key}' không hợp lệ hoặc độ dài không khớp.", "warning")
-                 intermediate[key] = [None] * num_crit_check # Attempt to pad for display
-                 valid = False
-            elif any(x is None for x in data): # Check for None placeholders within the list
-                 flash(f"Cảnh báo hiển thị: Dữ liệu '{key}' còn thiếu sót.", "warning")
-                 # No need to pad here, just warn
-
-    except Exception as e:
-         flash(f"Lỗi khi chuẩn bị dữ liệu trung gian để hiển thị: {e}", "warning")
-         print(f"Error preparing intermediate results: {e}")
-         traceback.print_exc()
-         intermediate = {} # Reset on error
-    return intermediate
-
-def clear_temporary_alt_data_for_index(index):
-     """Clears temporary session keys for a specific alt comparison index."""
-     keys = ['temp_alt_matrix', 'temp_alt_lambda_max', 'temp_alt_ci', 'temp_alt_cr', 'temp_alt_ri']
-     for key_base in keys:
-         session.pop(f'{key_base}_{index}', None)
-
-def clear_temporary_alt_data(num_criteria):
-     """Clears all temporary alt comparison keys."""
-     max_crit_guess = max(num_criteria if isinstance(num_criteria, int) and num_criteria > 0 else 0, 25) # Safe upper bound
-     for i in range(max_crit_guess):
-         clear_temporary_alt_data_for_index(i)
-     session.pop('form_data_alt', None)
-
-def clear_ahp_session_data():
-    """Clears session keys related to AHP steps (criteria onwards)."""
-    keys_to_clear = [
-        'selected_criteria', 'all_db_criteria', 'criteria_selected',
-        'crit_matrix', 'crit_weights', 'crit_lambda_max', 'crit_ci', 'crit_cr', 'crit_ri',
-        'criteria_comparison_done', 'form_data_crit',
-        'alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all',
-        'current_alt_criterion_index', 'alternative_comparisons_done', 'form_data_alt',
-        'final_scores', 'best_alternative_info'
-    ]
-    num_crit_guess = len(session.get('selected_criteria', [])) # Get length before clearing
-    for key in keys_to_clear:
-        session.pop(key, None)
-    clear_temporary_alt_data(num_crit_guess) # Clear indexed temp keys
-    session.modified = True
-
-def clear_session_data():
-    """Clears ALL session data related to an AHP run, including alternatives."""
-    clear_ahp_session_data() # Clear steps 1 onwards
-    session.pop('session_alternatives', None)
-    session.pop('all_db_alternatives', None)
-    session.pop('alternatives_selected', None)
-    session.modified = True
-
-@app.route("/clear")
-def clear_session_and_start():
-    """Clears the session and redirects to the start."""
-    clear_session_data()
-    flash("Session đã được xóa. Bắt đầu một phân tích mới.", "info")
-    return redirect(url_for('select_alternatives'))
-
-# --- Error Handlers --- (Unchanged, but good to keep)
+# --- Error Handlers (Giữ nguyên) ---
 @app.errorhandler(404)
 def page_not_found(e):
      flash("Trang yêu cầu không được tìm thấy (404).", "error")
@@ -1132,50 +1241,56 @@ def page_not_found(e):
 def internal_server_error(e):
      print(f"Internal Server Error: {e}")
      traceback.print_exc()
-     flash("Đã xảy ra lỗi máy chủ nội bộ (500). Vui lòng thử lại.", "error")
+     flash("Đã xảy ra lỗi máy chủ nội bộ (500). Vui lòng thử lại sau hoặc bắt đầu lại.", "error")
+     # clear_session_data() # Cân nhắc việc xóa session ở đây
      return render_template('error.html', message='Lỗi Máy chủ Nội bộ (500)'), 500
 
 @app.errorhandler(413)
 def request_entity_too_large(e):
-    flash("File tải lên quá lớn. Vui lòng chọn file nhỏ hơn (giới hạn 1MB).", "error")
-    # Attempt to redirect back intelligently
+    max_size_mb = app.config.get('MAX_CONTENT_LENGTH', 1*1024*1024) / (1024*1024)
+    flash(f"File tải lên quá lớn. Giới hạn {max_size_mb:.1f}MB.", "error")
     referer = request.headers.get("Referer")
+    # Redirect back intelligently based on referer or session state
     if referer:
-        # Basic check to see if it was likely an upload page
-        if 'compare_alternatives' in referer:
-            return redirect(url_for('compare_alternatives'))
-        if 'compare_criteria' in referer:
-            return redirect(url_for('compare_criteria'))
-    # Fallback redirect
-    if 'current_alt_criterion_index' in session:
-        return redirect(url_for('compare_alternatives'))
-    elif 'criteria_selected' in session:
-        return redirect(url_for('compare_criteria'))
-    else:
-        return redirect(url_for('select_criteria'))
+        if url_for('compare_alternatives') in referer: return redirect(url_for('compare_alternatives'))
+        if url_for('compare_criteria') in referer: return redirect(url_for('compare_criteria'))
+    if 'current_alt_criterion_index' in session: return redirect(url_for('compare_alternatives'))
+    if 'criteria_selected' in session: return redirect(url_for('compare_criteria'))
+    return redirect(url_for('select_alternatives'))
 
 
-# --- Main Execution ---
+# --- Main Execution (Giữ nguyên) ---
 if __name__ == "__main__":
-    # Test DB connection on startup using the new function
     print("Kiểm tra kết nối cơ sở dữ liệu PostgreSQL...")
     conn_test = get_connection()
     if conn_test is None:
          print("\n*** CẢNH BÁO: Không thể kết nối đến cơ sở dữ liệu PostgreSQL! ***")
-         print("1. Đảm bảo biến môi trường DATABASE_URL được đặt chính xác (trong .env hoặc hệ thống).")
-         print("2. Kiểm tra thông tin đăng nhập/host/port trong DATABASE_URL.")
+         print(f"1. Kiểm tra biến môi trường DATABASE_URL.")
+         print("2. Kiểm tra thông tin đăng nhập/host/port/tên DB.")
          print("3. Đảm bảo PostgreSQL server đang chạy và chấp nhận kết nối.")
-         print("4. Chạy lệnh SQL (cung cấp riêng) để tạo bảng nếu chưa có.\n")
+         print("4. Kiểm tra firewall.")
+         print("5. Chạy lệnh SQL tạo bảng nếu chưa có.\n")
     else:
         print("Kết nối cơ sở dữ liệu PostgreSQL thành công.")
-        conn_test.close()
+        try:
+            with conn_test.cursor() as cursor:
+                cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'phuong_an');")
+                pa_exists = cursor.fetchone()[0]
+                cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tieu_chi');")
+                tc_exists = cursor.fetchone()[0]
+                cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ket_qua');")
+                kq_exists = cursor.fetchone()[0]
+                print(f" - Bảng 'phuong_an' tồn tại: {pa_exists}")
+                print(f" - Bảng 'tieu_chi' tồn tại: {tc_exists}")
+                print(f" - Bảng 'ket_qua' tồn tại: {kq_exists}")
+                if not (pa_exists and tc_exists and kq_exists):
+                    print("*** CẢNH BÁO: Một hoặc nhiều bảng cần thiết không tồn tại trong DB! ***")
+        except psycopg2.Error as db_err:
+             print(f"Lỗi kiểm tra bảng trong DB: {db_err}")
+        finally:
+             conn_test.close()
 
-    # Get port from environment variable for Render compatibility
-    port = int(os.environ.get('PORT', 5000)) # Default to 5000 for local dev
-    # Run Flask app (debug should be False or read from env var in production)
-    is_debug = os.environ.get('FLASK_DEBUG', '1') == '1'
-    print(f"Khởi chạy ứng dụng Flask trên port {port} (Debug: {is_debug})...")
-    # For production via gunicorn, this app.run() is less relevant,
-    # but useful for local `python app.py` execution.
-    # Gunicorn will bind to 0.0.0.0:PORT automatically.
-    app.run(debug=is_debug, host='0.0.0.0', port=port)
+    port = int(os.environ.get('PORT', 5001))
+    is_debug = os.environ.get('FLASK_DEBUG', '0') == '1'
+    print(f"Khởi chạy ứng dụng Flask trên host 0.0.0.0, port {port} (Debug: {is_debug})...")
+    app.run(debug=is_debug, host='0.0.0.0', port=port, use_reloader=is_debug)

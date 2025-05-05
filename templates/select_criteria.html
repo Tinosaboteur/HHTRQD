@@ -6,18 +6,31 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
    <!-- Use the same JS functions as select_alternatives -->
    <script>
+    // Javascript functions (toggleCriteriaInput, addCustomInput, removeCustomInput) remain the same
     function toggleCriteriaInput(mode) {
-        document.getElementById('db-criteria-selection').style.display = (mode === 'db') ? 'block' : 'none';
-        document.getElementById('custom-criteria-input').style.display = (mode === 'custom') ? 'block' : 'none';
+        const dbSection = document.getElementById('db-criteria-selection');
+        const customSection = document.getElementById('custom-criteria-input');
+        const dbArea = document.getElementById('db-criteria-selection-area');
+        const customContainer = document.getElementById('custom-criteria-container');
+
+        dbSection.style.display = (mode === 'db') ? 'block' : 'none';
+        customSection.style.display = (mode === 'custom') ? 'block' : 'none';
+
         // Update required status based on mode
-        document.getElementById('db-criteria-selection-area').querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = (mode === 'db'));
-        document.getElementById('custom-criteria-container').querySelectorAll('input[type="text"]').forEach(inp => inp.required = (mode === 'custom'));
+        if (dbArea) {
+            dbArea.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = (mode === 'db'));
+        }
+         // Set required only on visible inputs
+        if (customContainer) {
+             customContainer.querySelectorAll('input[type="text"]').forEach(inp => inp.required = (mode === 'custom'));
+        }
+
 
         // Clear inputs when switching modes (optional but good practice)
         if (mode === 'db') {
-            document.querySelectorAll('#custom-criteria-input input[type="text"]').forEach(input => input.value = '');
+            if(customContainer) customContainer.querySelectorAll('input[type="text"]').forEach(input => input.value = '');
         } else if (mode === 'custom') {
-            document.querySelectorAll('#db-criteria-selection input[type="checkbox"]').forEach(chk => chk.checked = false);
+            if(dbArea) dbArea.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = false);
         }
     }
 
@@ -29,7 +42,8 @@
         newInput.type = 'text';
         newInput.name = inputName;
         newInput.placeholder = placeholder + ' ' + (container.children.length + 1);
-        newInput.required = true; // Add required attribute
+        // Only set required if the custom section is currently visible
+        newInput.required = (document.getElementById('custom-criteria-input').style.display === 'block');
 
         const removeButton = document.createElement('button');
         removeButton.type = 'button';
@@ -53,27 +67,64 @@
 
      document.addEventListener('DOMContentLoaded', () => {
         const initialMode = document.querySelector('input[name="mode"]:checked');
+        const dbSelection = document.getElementById('db-criteria-selection');
+        const customInput = document.getElementById('custom-criteria-input');
+        const dbArea = document.getElementById('db-criteria-selection-area');
+        const customContainer = document.getElementById('custom-criteria-container');
+
         if (initialMode) {
             toggleCriteriaInput(initialMode.value);
         } else {
             // Default state if nothing is checked (e.g., hide both)
-            document.getElementById('db-criteria-selection').style.display = 'none';
-            document.getElementById('custom-criteria-input').style.display = 'none';
+            if (dbSelection) dbSelection.style.display = 'none';
+            if (customInput) customInput.style.display = 'none';
              // Ensure inputs are not required initially
-             document.getElementById('db-criteria-selection-area').querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = false);
-             document.getElementById('custom-criteria-container').querySelectorAll('input[type="text"]').forEach(inp => inp.required = false);
+             if (dbArea) dbArea.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = false);
+             if (customContainer) customContainer.querySelectorAll('input[type="text"]').forEach(inp => inp.required = false);
         }
-         // Ensure initial custom fields have required=true if custom mode is selected by default
-        if (document.getElementById('custom-criteria-input').style.display === 'block') {
-             document.getElementById('custom-criteria-container').querySelectorAll('input[type="text"]').forEach(inp => inp.required = true);
+         // Ensure initial custom fields have required=true ONLY if custom mode is selected and visible
+        if (customInput && customInput.style.display === 'block' && customContainer) {
+             customContainer.querySelectorAll('input[type="text"]').forEach(inp => inp.required = true);
         }
+         // Ensure initial DB fields have required=true ONLY if DB mode is selected and visible
+         if (dbSelection && dbSelection.style.display === 'block' && dbArea) {
+              dbArea.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = true);
+         }
+
+         // Add form validation to check minimum checkboxes if DB mode is selected
+         const form = document.querySelector('form');
+         if(form){
+            form.addEventListener('submit', function(event){
+                const selectedMode = document.querySelector('input[name="mode"]:checked');
+                if (selectedMode && selectedMode.value === 'db') {
+                    const checkedBoxes = dbArea.querySelectorAll('input[type="checkbox"]:checked');
+                    if (checkedBoxes.length < {{ MIN_CRITERIA }}) {
+                        alert(`Vui lòng chọn ít nhất {{ MIN_CRITERIA }} tiêu chí từ cơ sở dữ liệu.`);
+                        event.preventDefault(); // Stop form submission
+                    }
+                } else if (selectedMode && selectedMode.value === 'custom') {
+                    // Basic check for at least MIN_CRITERIA non-empty custom inputs
+                    const customInputs = customContainer.querySelectorAll('input[type="text"]');
+                    let validCount = 0;
+                    customInputs.forEach(input => {
+                         if (input.value.trim() !== '') {
+                            validCount++;
+                         }
+                    });
+                    if (validCount < {{ MIN_CRITERIA }}) {
+                         alert(`Vui lòng nhập ít nhất {{ MIN_CRITERIA }} tên tiêu chí tùy chỉnh hợp lệ.`);
+                         event.preventDefault(); // Stop form submission
+                    }
+                }
+            });
+         }
     });
   </script>
    <style>
     /* Add styles from select_alternatives.html if not already generic in style.css */
     .mode-selection label { margin-right: 20px; cursor: pointer;}
-    .mode-selection input[type="radio"] { margin-right: 5px; }
-    #db-criteria-selection, #custom-criteria-input { margin-top: 15px; padding: 15px; border: 1px dashed #ccc; border-radius: 4px; }
+    .mode-selection input[type="radio"] { margin-right: 5px; vertical-align: middle; }
+    #db-criteria-selection, #custom-criteria-input { margin-top: 15px; padding: 15px; border: 1px dashed #ccc; border-radius: 4px; background-color: #fdfdfd;}
     .custom-item { display: flex; align-items: center; margin-bottom: 8px; }
     .custom-item input[type="text"] { flex-grow: 1; margin-right: 10px; padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 3px;}
     .btn-add, .btn-remove {
@@ -84,8 +135,10 @@
     .btn-remove { background-color: #fdd; border-color: #fbb;}
     .btn-add { background-color: #dfd; border-color: #bfb;}
     .error-message { color: var(--error-color); font-weight: bold; margin-top: 10px;}
+    .info-box { background-color: #e7f3fe; border-left: 5px solid #2196F3; padding: 10px 15px; margin-bottom: 20px; border-radius: 3px;}
+    .info-box h4 { margin-top: 0; margin-bottom: 8px; color: #1d6aab; border-bottom: none;}
     .info-box ul { margin-top: 5px; margin-bottom: 5px; padding-left: 20px; }
-    .info-box ul li { margin-bottom: 3px; list-style: disc; }
+    .info-box ul li { margin-bottom: 3px; list-style: disc; font-size: 0.95em; }
    </style>
 </head>
 <body>
@@ -107,16 +160,23 @@
      <p class="error-message">Lỗi Database: {{ db_error }}</p>
   {% endif %}
 
+  {# --- Display selected alternatives --- #}
   {% if selected_alternatives %}
-  <div class="info-box" style="background-color: #e7f3fe; border-left: 5px solid #2196F3; padding: 10px 15px; margin-bottom: 20px;">
+  <div class="info-box">
       <h4>Các phương án đang được xem xét:</h4>
       <ul>
           {% for alt in selected_alternatives %}
-          <li>{{ alt.ten_phuong_an }} {% if alt.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</li>
+          {# Ensure alt is a dictionary before accessing keys #}
+          {% if alt is mapping and 'ten_phuong_an' in alt %}
+             <li>{{ alt.ten_phuong_an }} {% if alt.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</li>
+          {% else %}
+             <li><span style="color:red;">Lỗi hiển thị dữ liệu phương án</span></li>
+          {% endif %}
           {% endfor %}
       </ul>
   </div>
   {% endif %}
+  {# --- End display selected alternatives --- #}
 
 
   <form method="post" action="{{ url_for('select_criteria') }}">

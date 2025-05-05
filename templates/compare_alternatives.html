@@ -8,9 +8,10 @@
    <style>
       /* Reuse styles from compare_criteria */
       .input-method-section { margin-top: 20px; padding: 15px; border: 1px solid #eee; border-radius: 4px; background-color: #f9f9f9; }
-      .input-method-section h4 { margin-top: 0; color: #555; }
+      .input-method-section h4 { margin-top: 0; color: #555; border-bottom: 1px dotted #ccc; padding-bottom: 5px; margin-bottom: 15px;}
       .file-input-label { display: block; margin-bottom: 8px; font-weight: bold;}
       .file-input-container input[type="file"] { margin-bottom: 10px; }
+      .comparison-matrix th:first-child { min-width: 120px; /* Ensure space for alternative names */}
    </style>
 </head>
 <body>
@@ -18,6 +19,7 @@
   <h2>Bước 3: So sánh cặp các phương án (ngành học)</h2>
   <h3>Theo tiêu chí: <strong>{{ criterion.ten_tieu_chi }}</strong> ({{ criterion_index + 1 }}/{{ total_criteria }})</h3>
   <p>Nhập thủ công mức độ ưu tiên tương đối của phương án hàng so với phương án cột <i>dựa trên tiêu chí này</i> (1-9 hoặc nghịch đảo 1/2..1/9) HOẶC tải lên file Excel.</p>
+  <p><i>Gợi ý thang đo Saaty: 1=Ngang nhau, 3=Quan trọng hơn một chút, 5=Quan trọng hơn, 7=Rất quan trọng, 9=Cực kỳ quan trọng. Giá trị nghịch đảo (vd: 1/3 ≈ 0.33, 1/5 = 0.2) cho mức độ kém quan trọng hơn.</i></p>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -48,32 +50,39 @@
             </tr>
            </thead>
            <tbody>
-            {% for alt_j in alternatives %} {# Outer loop row 'j' #}
-              {% set j = loop.index0 %}
-              <tr>
-                <th>{{ alt_j.ten_phuong_an }}</th>
-                {% for alt_k in alternatives %} {# Inner loop col 'k' #}
-                  {% set k = loop.index0 %}
-                  {% if j == k %}
-                    <td class="diagonal">1</td>
-                  {% elif j < k %} {# Upper triangle input #}
-                    <td>
-                       {# Name uses index to avoid collision with IDs #}
-                      <input type="number" step="any" min="0.01" max="100" lang="en" class="comparison-input"
-                             name="alt_pc_{{ criterion_index }}_{{ j }}_{{ k }}" {# Use criterion_index #}
-                             value="{{ form_data.get('alt_pc_' + criterion_index|string + '_' + j|string + '_' + k|string) if form_data else '' }}"
-                             > {# Not required if Excel is an option #}
-                      <span class="validation-message"></span>
-                    </td>
-                  {% else %} {# Lower triangle reciprocal #}
-                    <td class="reciprocal">—</td>
-                  {% endif %}
-                {% endfor %} {# End inner loop #}
-              </tr>
-            {% endfor %} {# End outer loop #}
+            {# Check if alternatives exist and is a list before looping #}
+            {% if alternatives and alternatives is iterable %}
+                {% for alt_j in alternatives %} {# Outer loop row 'j' #}
+                  {% set j = loop.index0 %}
+                  <tr>
+                    {# Check if alt_j is a dictionary before accessing key #}
+                    <th>{{ alt_j.ten_phuong_an if alt_j is mapping else 'Lỗi dữ liệu P.Án' }}</th>
+                    {% for alt_k in alternatives %} {# Inner loop col 'k' #}
+                      {% set k = loop.index0 %}
+                      {% if j == k %}
+                        <td class="diagonal">1</td>
+                      {% elif j < k %} {# Upper triangle input #}
+                        <td>
+                           {# Name uses indices: criterion_index, row_index (j), col_index (k) #}
+                          <input type="number" step="any" min="0.01" max="100" lang="en" class="comparison-input"
+                                 name="alt_pc_{{ criterion_index }}_{{ j }}_{{ k }}"
+                                 {# Populate value from form_data if it exists (for sticky forms on error) #}
+                                 value="{{ form_data.get('alt_pc_' + criterion_index|string + '_' + j|string + '_' + k|string) if form_data else '' }}"
+                                 > {# Not strictly required if Excel is an option, but good practice for manual #}
+                          <span class="validation-message"></span> {# For JS validation #}
+                        </td>
+                      {% else %} {# Lower triangle reciprocal (display only) #}
+                        <td class="reciprocal">—</td>
+                      {% endif %}
+                    {% endfor %} {# End inner loop #}
+                  </tr>
+                {% endfor %} {# End outer loop #}
+            {% else %}
+                 <tr><td colspan="{{ (alternative_names|length) + 1 }}">Lỗi: Không có dữ liệu phương án hợp lệ để hiển thị.</td></tr>
+            {% endif %}
            </tbody>
         </table>
-        <small><i>Để trống nếu bạn sử dụng file Excel.</i></small>
+        <small><i>Để trống nếu bạn sử dụng file Excel cho tiêu chí này.</i></small>
      </div>
 
     <!-- Excel Upload Section -->
@@ -81,15 +90,15 @@
         <h4>Hoặc Tải lên file Excel:</h4>
          <div class="file-input-container">
             <label for="alternative_excel_file_{{ criterion_index }}" class="file-input-label">Chọn file (.xlsx, .xls):</label>
-            {# Use unique name for each criterion's file input #}
-            <input type="file" name="alternative_excel_file_{{ criterion_index }}" id="alternative_excel_file_{{ criterion_index }}" accept=".xlsx, .xls">
+            {# Use unique name/id for each criterion's file input #}
+            <input type="file" name="alternative_excel_file_{{ criterion_index }}" id="alternative_excel_file_{{ criterion_index }}" accept=".xlsx, .xls, .xlsm, .xlsb">
         </div>
-        <small><i>File Excel cần chứa ma trận vuông {{ alternatives|length }}x{{ alternatives|length }} cho tiêu chí này.</i></small>
-         <small><i>Nếu cả hai phương thức đều được cung cấp, file Excel sẽ được ưu tiên.</i></small>
+        <small><i>File Excel cần chứa ma trận vuông {{ alternatives|length }}x{{ alternatives|length }} cho tiêu chí '{{ criterion.ten_tieu_chi }}'.</i></small>
+         <small><i>Nếu cả hai phương thức đều được cung cấp (nhập tay và file Excel), file Excel sẽ được ưu tiên.</i></small>
     </div>
 
 
-    {# Display calculation results if available (e.g., after a failed POST for THIS criterion) #}
+    {# Display temporary calculation results if available (e.g., after a failed POST for THIS criterion due to CR > threshold) #}
     {% if alt_cr is not none %}
     <div class="results-box">
         <h4>Kết quả kiểm tra nhất quán (Phương án - Tiêu chí: {{ criterion.ten_tieu_chi }}):</h4>
@@ -108,7 +117,8 @@
     {% endif %}
 
     <div class="button-container">
-         {# Back button logic: always go back to criteria comparison overview #}
+         {# Back button logic: Always go back to criteria comparison overview #}
+         {# This assumes criteria comparison was successful to get here #}
          <a href="{{ url_for('compare_criteria') }}" class="btn btn-secondary">← Quay lại so sánh Tiêu chí</a>
 
         <input type="submit" value="Lưu & Tiếp tục {% if criterion_index + 1 < total_criteria %}với Tiêu chí Sau{% else %}Xem Kết quả{% endif %} →" class="btn">

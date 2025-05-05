@@ -1,3 +1,4 @@
+--- START OF FILE results_history.html ---
 <!doctype html>
 <html lang="vi">
 <head>
@@ -10,6 +11,7 @@
         .criteria-weights-list { list-style: none; padding-left: 15px; font-size: 0.9em; margin-top: 10px;}
         .criteria-weights-list li { margin-bottom: 3px; }
         .error-message { color: var(--error-color); font-weight: bold; margin-top: 10px;}
+        .data-unavailable { font-style: italic; color: #888; } /* Thêm style cho dữ liệu không có sẵn */
     </style>
 </head>
 <body>
@@ -48,29 +50,41 @@
                         </thead>
                         <tbody>
                             {% for row in history_item.alternatives %} {# Already sorted by score #}
+                            {# Thêm kiểm tra row là dictionary và có key cần thiết #}
+                            {% if row is mapping and 'phuong_an_ten' in row and 'final_score' in row and 'is_best' in row %}
                             <tr {% if row.is_best %}class="best-choice"{% endif %}>
                                 <td>{{ loop.index }}</td>
                                 <td>{{ row.phuong_an_ten }}</td>
                                 <td>{{ "%.5f"|format(row.final_score) }}</td>
                                 <td>{% if row.is_best %}🏆 Có{% else %}Không{% endif %}</td>
                             </tr>
+                            {% else %}
+                             <tr><td colspan="4" class="data-unavailable">Lỗi hiển thị dữ liệu phương án</td></tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
                 {% else %}
-                     <p>Không có dữ liệu phương án cho lần phân tích này.</p>
+                     <p class="data-unavailable">Không có dữ liệu phương án cho lần phân tích này.</p>
                 {% endif %}
 
                  <h4>Trọng số Tiêu chí sử dụng:</h4>
-                 {% if history_item.criteria %}
+                 {# **** THAY ĐỔI Ở ĐÂY **** #}
+                 {% if history_item.criteria %} {# Kiểm tra xem list criteria có dữ liệu không #}
                      <ul class="criteria-weights-list">
                          {% for crit_row in history_item.criteria %}
-                             <li><strong>{{ crit_row.tieu_chi_ten }}:</strong> {{ "%.4f"|format(crit_row.criterion_weight) }}</li>
+                             {# Thêm kiểm tra crit_row là dictionary và có key cần thiết #}
+                             {% if crit_row is mapping and 'tieu_chi_ten' in crit_row and 'criterion_weight' in crit_row %}
+                                 <li><strong>{{ crit_row.tieu_chi_ten }}:</strong> {{ "%.4f"|format(crit_row.criterion_weight) }}</li>
+                             {% else %}
+                                 <li><span class="data-unavailable">Lỗi hiển thị dữ liệu tiêu chí</span></li>
+                             {% endif %}
                          {% endfor %}
                      </ul>
-                 {% else %}
-                      <p>Không có dữ liệu trọng số tiêu chí cho lần phân tích này.</p>
+                 {% else %} {# Nếu history_item.criteria rỗng hoặc None #}
+                      <p class="data-unavailable">Không có dữ liệu trọng số tiêu chí cho lần phân tích này.</p>
                  {% endif %}
+                 {# **** KẾT THÚC THAY ĐỔI **** #}
             </div>
         {% endfor %} {# End loop history_list #}
 
@@ -84,3 +98,4 @@
     </div>
 </body>
 </html>
+--- END OF FILE results_history.html ---
