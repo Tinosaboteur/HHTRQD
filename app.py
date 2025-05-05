@@ -42,7 +42,7 @@ def inject_global_constants():
 def get_connection():
     """Establishes a connection to the PostgreSQL database using DATABASE_URL."""
     conn = None
-    database_url = os.environ.get('DATABASE_URL')
+    database_url = 'postgresql://admin:RSWYnshjkpXraGp5THCjSIaxUdtIwE4Z@dpg-d03iae2li9vc73fmjp60-a.singapore-postgres.render.com/test_2s9p'
     if not database_url:
         print("Database connection error: DATABASE_URL environment variable not set.")
         flash("Lỗi cấu hình: Không tìm thấy chuỗi kết nối cơ sở dữ liệu.", "error")
