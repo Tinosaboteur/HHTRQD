@@ -1,0 +1,21 @@
+# render.yaml
+services:
+  - type: web
+    name: ahp-decision-app
+    # ... other settings ...
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11 # Hoặc phiên bản của bạn
+      - key: DATABASE_URL # <-- Quan trọng
+        fromDatabase:
+          name: test_2s9p
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      # - key: FLASK_DEBUG # Nên đặt là 0 khi deploy
+      #   value: 0
+
+databases:
+  - name: test_2s9p
+    plan: free # Hoặc plan của bạn
+    # region: oregon # Optional
