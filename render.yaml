@@ -1,21 +1,26 @@
 # render.yaml
+
 services:
   - type: web
-    name: ahp-decision-app
-    # ... other settings ...
+    name: ten-web-service-cua-ban # Ví dụ: ahp-app
+    env: python
+    plan: free # Hoặc plan của bạn
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11 # Hoặc phiên bản của bạn
-      - key: DATABASE_URL # <-- Quan trọng
+      # --- Phần quan trọng cho DATABASE_URL ---
+      - key: DATABASE_URL   # Tên biến môi trường mà code app.py của bạn sẽ đọc
         fromDatabase:
-          name: test_2s9p
-          property: connectionString
-      - key: SECRET_KEY
+          name: test_2s9p # <<<--- TÊN NÀY QUAN TRỌNG
+          property: connectionString            # Chỉ định lấy chuỗi kết nối
+      # ------------------------------------------
+
+      - key: SECRET_KEY    # Render tự tạo khóa bí mật
         generateValue: true
-      # - key: FLASK_DEBUG # Nên đặt là 0 khi deploy
-      #   value: 0
+      - key: PYTHON_VERSION # Tùy chọn: chỉ định phiên bản Python
+        value: 3.11 # Ví dụ
+
 
 databases:
-  - name: test_2s9p
+  - name: test_2s9p # <<<--- TÊN DATABASE CỦA BẠN
     plan: free # Hoặc plan của bạn
-    # region: oregon # Optional
