@@ -18,7 +18,7 @@
 
         // Update required status based on mode
         if (dbArea) {
-            dbArea.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = (mode === 'db'));
+            dbArea.querySelectorAll('input[type="criteria_ids"]').forEach(chk => chk.required = (mode === 'db'));
         }
          // Set required only on visible inputs
         if (customContainer) {
@@ -98,7 +98,7 @@
                 const selectedMode = document.querySelector('input[name="mode"]:checked');
                 if (selectedMode && selectedMode.value === 'db') {
                     const checkedBoxes = dbArea.querySelectorAll('input[type="checkbox"]:checked');
-                    if (checkedBoxes.length < {{ MIN_CRITERIA }}) {
+                    if (checkedBoxes.length < 4){
                         alert(`Vui lòng chọn ít nhất {{ MIN_CRITERIA }} tiêu chí từ cơ sở dữ liệu.`);
                         event.preventDefault(); // Stop form submission
                     }
@@ -111,7 +111,7 @@
                             validCount++;
                          }
                     });
-                    if (validCount < {{ MIN_CRITERIA }}) {
+                    if (validCount < 4) {
                          alert(`Vui lòng nhập ít nhất {{ MIN_CRITERIA }} tên tiêu chí tùy chỉnh hợp lệ.`);
                          event.preventDefault(); // Stop form submission
                     }
