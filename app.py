@@ -6,9 +6,9 @@ from datetime import datetime
 import os
 import math
 import traceback
-import json # <--- THÊM MỚI: Cho biểu đồ và dữ liệu JSON
-import pandas as pd # <--- THÊM MỚI: Cho CSV (có thể thay bằng module csv)
-import csv # <--- THÊM MỚI: Một lựa chọn khác cho CSV
+import json 
+import pandas as pd 
+import csv 
 from werkzeug.utils import secure_filename
 import uuid
 from dotenv import load_dotenv
@@ -17,8 +17,8 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'default_fallback_secret_key_for_dev_only')
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024 # 1 MB
-# THÊM MỚI: Phần mở rộng file CSV được phép
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024 
+
 ALLOWED_CSV_EXTENSIONS = {'csv'}
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -38,11 +38,10 @@ def inject_global_constants():
         CR_THRESHOLD=CR_THRESHOLD,
         MIN_CRITERIA=MIN_CRITERIA,
         MIN_ALTERNATIVES=MIN_ALTERNATIVES,
-        json=json # <--- THÊM MỚI: Để sử dụng json.dumps trong template
+        json=json 
     )
 
 def get_connection():
-    # ... (Giữ nguyên hàm get_connection)
     conn = None
     database_url = 'postgresql://admin:RSWYnshjkpXraGp5THCjSIaxUdtIwE4Z@dpg-d03iae2li9vc73fmjp60-a.singapore-postgres.render.com/test_2s9p'
     if not database_url:
@@ -50,7 +49,7 @@ def get_connection():
         flash("Lỗi cấu hình: Không tìm thấy chuỗi kết nối cơ sở dữ liệu.", "error")
         return None
     try:
-        conn = psycopg2.connect(database_url) # Use DATABASE_URL
+        conn = psycopg2.connect(database_url) 
         return conn
     except psycopg2.OperationalError as e:
         print(f"Database connection error (Operational): {e}")
@@ -67,7 +66,6 @@ def get_connection():
 
 
 def execute_query(query, params=None, fetchone=False, fetchall=False, commit=False):
-    # ... (Giữ nguyên hàm execute_query)
     conn = get_connection()
     if not conn:
         return None
@@ -101,7 +99,6 @@ def execute_query(query, params=None, fetchone=False, fetchall=False, commit=Fal
     return result
 
 def compute_pairwise_matrix(prefix, item_names, form_or_dict_data):
-    # THAY ĐỔI: Chấp nhận form_or_dict_data để có thể dùng cho dữ liệu từ CSV
     n = len(item_names)
     if n <= 0:
         flash("Không thể tạo ma trận so sánh với 0 phần tử.", "error")
@@ -111,14 +108,13 @@ def compute_pairwise_matrix(prefix, item_names, form_or_dict_data):
     for i in range(n):
         for j in range(i + 1, n):
             key = f"{prefix}_{i}_{j}"
-            # THAY ĐỔI: Lấy giá trị từ form hoặc dictionary
             if isinstance(form_or_dict_data, dict):
                 val_str = form_or_dict_data.get(key)
-            else: # Giả sử là request.form
+            else: 
                 val_str = form_or_dict_data.get(key)
 
 
-            if val_str is None or str(val_str).strip() == "": # Chuyển val_str sang string để strip
+            if val_str is None or str(val_str).strip() == "": 
                 flash(f"Thiếu giá trị so sánh giữa '{item_names[i]}' và '{item_names[j]}'. Vui lòng cung cấp tất cả các so sánh.", "error")
                 return None
             try:
@@ -139,7 +135,6 @@ def compute_pairwise_matrix(prefix, item_names, form_or_dict_data):
     return matrix
 
 def parse_excel_matrix(file_storage, expected_size, item_names_for_validation=None):
-    # ... (Giữ nguyên hàm parse_excel_matrix)
     if not file_storage or file_storage.filename == '':
         return None, "Không có file nào được chọn."
     allowed_extensions = ('.xlsx', '.xls', '.xlsm', '.xlsb')
@@ -191,7 +186,7 @@ def parse_excel_matrix(file_storage, expected_size, item_names_for_validation=No
                  val_ji = matrix_np[j, i]
                  if val_ij <= 0 or val_ji <= 0:
                      return None, f"Giá trị tại ({start_row+i+1},{start_col+j+1}) hoặc ({start_row+j+1},{start_col+i+1}) không phải là số dương."
-                 if abs(val_ij * val_ji - 1.0) > 1e-4: # Increased tolerance
+                 if abs(val_ij * val_ji - 1.0) > 1e-4: 
                     return None, f"Giá trị nghịch đảo không chính xác tại vị trí ({start_row+i+1},{start_col+j+1}) và ({start_row+j+1},{start_col+i+1}). Giá trị phải dương và A[j,i] ≈ 1/A[i,j] (tìm thấy {val_ij:.4f} và {val_ji:.4f}, tích của chúng là {val_ij*val_ji:.4f})."
 
         return matrix_np, None
@@ -202,7 +197,6 @@ def parse_excel_matrix(file_storage, expected_size, item_names_for_validation=No
 
 
 def ahp_weighting(matrix):
-    # ... (Giữ nguyên hàm ahp_weighting)
     if matrix is None:
         return None, None, None, None, None
 
@@ -278,7 +272,6 @@ def ahp_weighting(matrix):
         return None, None, None, None, None
 
 
-# --- Helper Functions for Session Management ---
 def clear_temporary_alt_data_for_index(index):
     keys = ['temp_alt_matrix', 'temp_alt_lambda_max', 'temp_alt_ci', 'temp_alt_cr', 'temp_alt_ri']
     for key_base in keys:
@@ -298,7 +291,6 @@ def clear_ahp_session_data():
         'alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all',
         'current_alt_criterion_index', 'alternative_comparisons_done', 'form_data_alt',
         'final_scores', 'best_alternative_info',
-        # THÊM MỚI: Dọn dẹp session liên quan đến CSV
         'csv_preview_data', 'csv_parsed_raw_data', 'csv_filename', 'csv_input_error'
     ]
     num_crit_guess = len(session.get('selected_criteria', []))
@@ -333,7 +325,6 @@ def index_redirect():
 
 @app.route("/select_alternatives", methods=["GET", "POST"])
 def select_alternatives():
-    # ... (Logic hiện tại của select_alternatives, không thay đổi nhiều ở đây)
     if request.method == "POST":
         selection_mode = request.form.get('mode')
         alternatives = []
@@ -392,8 +383,6 @@ def select_alternatives():
         session.modified = True
         return redirect(url_for('select_criteria'))
 
-    # --- GET Request ---
-    # clear_session_data() # Không nên clear ở đây nữa nếu người dùng đang quay lại từ bước sau
     db_error = None
     query = "SELECT id, ten_phuong_an FROM phuong_an ORDER BY id"
     all_alternatives_db = execute_query(query, fetchall=True)
@@ -405,7 +394,6 @@ def select_alternatives():
 
 @app.route("/select_criteria", methods=["GET", "POST"])
 def select_criteria():
-    # ... (Logic hiện tại của select_criteria, không thay đổi nhiều)
     if not session.get('alternatives_selected'):
         flash("Vui lòng chọn hoặc nhập các phương án trước.", "info")
         return redirect(url_for('select_alternatives'))
@@ -482,12 +470,11 @@ def select_criteria():
                            selected_alternatives=selected_alternatives_for_display)
 
 
-# --- THÊM MỚI: Route để thêm phương án/tiêu chí vào DB ---
 @app.route("/add_item_to_db", methods=["POST"])
 def add_item_to_db():
     item_type = request.form.get('item_type')
     new_item_name = request.form.get('new_item_name', '').strip()
-    redirect_url_name = 'select_alternatives' # Default redirect
+    redirect_url_name = 'select_alternatives' 
 
     if not new_item_name:
         flash("Tên không được để trống.", "error")
@@ -504,22 +491,17 @@ def add_item_to_db():
         return redirect(url_for(redirect_url_name))
 
     if new_item_name:
-        # Kiểm tra trùng lặp
         check_query = f"SELECT id FROM {table_name} WHERE {column_name} = %s"
         existing_item = execute_query(check_query, (new_item_name,), fetchone=True)
         if existing_item:
             flash(f"Tên '{new_item_name}' đã tồn tại trong cơ sở dữ liệu.", "warning")
         else:
             insert_query = f"INSERT INTO {table_name} ({column_name}) VALUES (%s)"
-            # execute_query đã có commit=True
             success = execute_query(insert_query, (new_item_name,), commit=True)
-            # Kiểm tra thành công dựa trên việc có lỗi hay không (execute_query sẽ flash lỗi)
-            # và có thể kiểm tra lại bằng cách select
             check_again = execute_query(check_query, (new_item_name,), fetchone=True)
             if check_again:
                 flash(f"Đã thêm '{new_item_name}' vào cơ sở dữ liệu thành công!", "success")
             else:
-                # Lỗi có thể đã được flash bởi execute_query, hoặc có thể là lỗi logic khác
                 flash(f"Không thể thêm '{new_item_name}' vào cơ sở dữ liệu. Kiểm tra log.", "error")
 
     return redirect(url_for(redirect_url_name))
@@ -527,7 +509,6 @@ def add_item_to_db():
 
 @app.route("/compare_criteria", methods=["GET", "POST"])
 def compare_criteria():
-    # ... (Logic hiện tại, không thay đổi nhiều về cốt lõi)
     if not session.get('criteria_selected'):
         flash("Vui lòng chọn tiêu chí trước.", "info")
         return redirect(url_for('select_criteria'))
@@ -636,7 +617,6 @@ def compare_criteria():
 
 @app.route("/compare_alternatives", methods=["GET", "POST"])
 def compare_alternatives():
-    # ... (Logic hiện tại, không thay đổi nhiều về cốt lõi)
     if not session.get('criteria_comparison_done'):
         flash("Vui lòng hoàn thành so sánh tiêu chí (với CR hợp lệ) trước.", "info")
         return redirect(url_for('compare_criteria'))
@@ -801,7 +781,6 @@ def compare_alternatives():
                            criterion_index=current_index,
                            total_criteria=num_criteria)
 
-# --- THÊM MỚI: Các hàm và route cho xử lý CSV ---
 def allowed_csv_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_CSV_EXTENSIONS
@@ -834,15 +813,13 @@ def parse_single_csv_ahp_data(file_storage):
     criteria_names = []
     alternatives_names = []
     
-    # Dữ liệu cho việc build matrix trong backend
     criteria_comparisons_for_backend = {} 
     alternatives_comparisons_for_backend = {} 
     
-    # Dữ liệu cho việc hiển thị ma trận preview trong frontend
-    criteria_matrix_preview = {} # Sẽ có dạng {("ItemA", "ItemB"): value}
-    alternatives_matrices_preview = {} # Sẽ có dạng {"CriterionCtx": {("AltX", "AltY"): value}}
+    criteria_matrix_preview = {} 
+    alternatives_matrices_preview = {} 
 
-    parsed_rows_for_preview_raw = [] # Vẫn giữ lại để debug hoặc hiển thị raw nếu cần
+    parsed_rows_for_preview_raw = [] 
 
     temp_crit_names = set()
     temp_alt_names = set()
@@ -876,7 +853,6 @@ def parse_single_csv_ahp_data(file_storage):
     if not alternatives_names or len(alternatives_names) < MIN_ALTERNATIVES:
         return None, f"Không đủ tên phương án (cần {MIN_ALTERNATIVES}, tìm thấy {len(alternatives_names)}).", None
 
-    # Build name-to-index maps for easier lookup
     crit_name_to_idx = {name: i for i, name in enumerate(criteria_names)}
     alt_name_to_idx = {name: i for i, name in enumerate(alternatives_names)}
 
@@ -930,14 +906,13 @@ def parse_single_csv_ahp_data(file_storage):
 
             if criterion_context not in alternatives_matrices_preview:
                 alternatives_matrices_preview[criterion_context] = {}
-            if criterion_context not in alternatives_comparisons_for_backend: # Thay đổi key
+            if criterion_context not in alternatives_comparisons_for_backend: 
                 alternatives_comparisons_for_backend[criterion_context] = {}
 
             criterion_idx_for_prefix = crit_name_to_idx[criterion_context]
             idx_row_alt = alt_name_to_idx[item_row_name]
             idx_col_alt = alt_name_to_idx[item_col_name]
             
-            # Dùng cho backend processing
             if idx_row_alt < idx_col_alt:
                 key_backend = f"alt_pc_{criterion_idx_for_prefix}_{idx_row_alt}_{idx_col_alt}"
                 alternatives_comparisons_for_backend[criterion_context][key_backend] = value
@@ -947,7 +922,6 @@ def parse_single_csv_ahp_data(file_storage):
                 alternatives_comparisons_for_backend[criterion_context][key_backend] = 1.0/value
                 alternatives_matrices_preview[criterion_context][(item_col_name, item_row_name)] = 1.0/value
 
-    # Kiểm tra số lượng so sánh (giữ nguyên logic kiểm tra backend data)
     num_crit = len(criteria_names)
     expected_crit_comps = (num_crit * (num_crit - 1)) / 2
     if len(criteria_comparisons_for_backend) < expected_crit_comps:
@@ -961,12 +935,8 @@ def parse_single_csv_ahp_data(file_storage):
     if len(alternatives_comparisons_for_backend) < num_crit:
          return None, f"Thiếu dữ liệu so sánh PA cho một số TC (cần {num_crit} bộ, có {len(alternatives_comparisons_for_backend)}).", None
     
-    # Chuẩn bị dữ liệu đầy đủ hơn cho preview template
-    # Chúng ta cần các ma trận hoàn chỉnh (bao gồm cả giá trị nghịch đảo và đường chéo)
-    # để template có thể render.
-    
-    # 1. Criteria Preview Matrix (full)
-    crit_preview_full_matrix = np.ones((num_crit, num_crit), dtype=object) # Dùng object để chứa số hoặc '-'
+
+    crit_preview_full_matrix = np.ones((num_crit, num_crit), dtype=object) 
     for i in range(num_crit):
         for j in range(num_crit):
             name_i = criteria_names[i]
@@ -977,10 +947,7 @@ def parse_single_csv_ahp_data(file_storage):
                 val = criteria_matrix_preview.get((name_i, name_j))
                 crit_preview_full_matrix[i, j] = round(val, 4) if val is not None else "Lỗi"
                 crit_preview_full_matrix[j, i] = round(1.0/val, 4) if val is not None and val != 0 else "Lỗi"
-            # elif j < i: (đã xử lý bởi i < j)
-            #     pass
 
-    # 2. Alternatives Preview Matrices (full)
     alt_previews_full_matrices = {}
     for crit_name_ctx, comparisons in alternatives_matrices_preview.items():
         alt_matrix_for_crit = np.ones((num_alt, num_alt), dtype=object)
@@ -994,242 +961,29 @@ def parse_single_csv_ahp_data(file_storage):
                     val = comparisons.get((alt_name_i, alt_name_j))
                     alt_matrix_for_crit[i, j] = round(val, 4) if val is not None else "Lỗi"
                     alt_matrix_for_crit[j, i] = round(1.0/val, 4) if val is not None and val != 0 else "Lỗi"
-                # elif j < i:
-                #     pass
         alt_previews_full_matrices[crit_name_ctx] = alt_matrix_for_crit.tolist()
 
 
     return {
         "criteria_names": criteria_names,
         "alternatives_names": alternatives_names,
-        "criteria_comparisons_dict": criteria_comparisons_for_backend, # Cho backend
-        "alternatives_comparisons_dict": alternatives_comparisons_for_backend, # Cho backend
-        "parsed_rows_for_preview_raw": parsed_rows_for_preview_raw, # Vẫn giữ lại
-        # THÊM MỚI cho preview dạng ma trận
+        "criteria_comparisons_dict": criteria_comparisons_for_backend,
+        "alternatives_comparisons_dict": alternatives_comparisons_for_backend, 
+        "parsed_rows_for_preview_raw": parsed_rows_for_preview_raw, 
         "criteria_preview_matrix_render": crit_preview_full_matrix.tolist(),
         "alternatives_preview_matrices_render": alt_previews_full_matrices
-    }, None, parsed_rows_for_preview_raw # Trả về thêm raw_rows để route sử dụng
+    }, None, parsed_rows_for_preview_raw
 
-
-@app.route("/upload_csv", methods=["GET", "POST"])
-def upload_csv():
-    if request.method == "POST":
-        # --- Xử lý nút "Xác nhận và Tính toán" ---
-        if 'confirm_csv_data' in request.form:
-            csv_preview_data = session.get('csv_preview_data')
-            if not csv_preview_data:
-                flash("Không có dữ liệu CSV để xác nhận. Vui lòng tải lên lại.", "error")
-                return redirect(url_for('upload_csv'))
-
-            criteria_names = csv_preview_data.get('criteria_names')
-            alternatives_names = csv_preview_data.get('alternatives_names')
-            # Sử dụng dict đã được chuẩn bị cho backend từ hàm parse
-            crit_comp_dict_for_backend = csv_preview_data.get('criteria_comparisons_dict')
-            alt_comp_dict_by_crit_name_for_backend = csv_preview_data.get('alternatives_comparisons_dict')
-
-            # Kiểm tra dữ liệu cơ bản từ session
-            if not all([criteria_names, alternatives_names, crit_comp_dict_for_backend, alt_comp_dict_by_crit_name_for_backend]):
-                flash("Dữ liệu CSV trong session không đầy đủ để xác nhận. Vui lòng tải lại file.", "error")
-                session['csv_input_error'] = True
-                return redirect(url_for('upload_csv'))
-
-
-            # --- Xóa session cũ và thiết lập AHP từ dữ liệu CSV ---
-            clear_session_data() # Xóa toàn bộ session AHP trước đó
-
-            # 1. Thiết lập alternatives và criteria
-            session['session_alternatives'] = [{'id': None, 'ten_phuong_an': name} for name in alternatives_names]
-            session['selected_criteria'] = [{'id': None, 'ten_tieu_chi': name} for name in criteria_names]
-            session['all_db_alternatives'] = False # Vì từ CSV
-            session['all_db_criteria'] = False   # Vì từ CSV
-            session['alternatives_selected'] = True
-            session['criteria_selected'] = True
-
-            num_criteria = len(criteria_names)
-            num_alternatives = len(alternatives_names)
-
-            # 2. Xử lý ma trận tiêu chí
-            crit_matrix = compute_pairwise_matrix("pc", criteria_names, crit_comp_dict_for_backend)
-            if crit_matrix is None:
-                # Lỗi đã được flash bởi compute_pairwise_matrix
-                session['csv_input_error'] = True # Đánh dấu có lỗi để hiển thị lại preview (nếu cần)
-                return redirect(url_for('upload_csv'))
-
-            crit_weights, crit_lambda_max, crit_ci, crit_cr, crit_ri = ahp_weighting(crit_matrix)
-            if crit_weights is None:
-                # Lỗi đã được flash bởi ahp_weighting
-                session['csv_input_error'] = True
-                return redirect(url_for('upload_csv'))
-
-            if crit_cr is not None and crit_cr > CR_THRESHOLD:
-                flash(f"CR cho ma trận tiêu chí ({crit_cr:.4f}) vượt ngưỡng ({CR_THRESHOLD:.2f}). Vui lòng kiểm tra lại file CSV.", "error")
-                session['csv_input_error'] = True
-                # Không lưu kết quả lỗi vào session vĩnh viễn
-                return redirect(url_for('upload_csv'))
-
-            session['crit_matrix'] = crit_matrix.tolist()
-            session['crit_weights'] = crit_weights.tolist()
-            session['crit_lambda_max'] = crit_lambda_max
-            session['crit_ci'] = crit_ci
-            session['crit_cr'] = crit_cr
-            session['crit_ri'] = crit_ri
-            session['criteria_comparison_done'] = True
-
-            # 3. Xử lý ma trận phương án
-            session['alt_matrices_all'] = [None] * num_criteria
-            session['alt_weights_all'] = [None] * num_criteria
-            session['alt_lambda_max_all'] = [None] * num_criteria
-            session['alt_ci_all'] = [None] * num_criteria
-            session['alt_cr_all'] = [None] * num_criteria
-            session['alt_ri_all'] = [None] * num_criteria
-
-            # Lặp qua tên tiêu chí đã được sắp xếp từ hàm parse
-            for i, crit_name_context in enumerate(criteria_names):
-                # alt_comp_dict_by_crit_name_for_backend có key là tên tiêu chí
-                alt_comp_data_for_this_crit = alt_comp_dict_by_crit_name_for_backend.get(crit_name_context)
-                
-                if not alt_comp_data_for_this_crit:
-                    flash(f"Thiếu dữ liệu so sánh phương án cho tiêu chí '{crit_name_context}' trong file CSV đã xử lý.", "error")
-                    session['csv_input_error'] = True
-                    return redirect(url_for('upload_csv'))
-
-                # compute_pairwise_matrix yêu cầu dict có key dạng "alt_pc_{crit_idx}_i_j"
-                # Dữ liệu trong alt_comp_data_for_this_crit đã có key đúng dạng này
-                alt_matrix = compute_pairwise_matrix(f"alt_pc_{i}", alternatives_names, alt_comp_data_for_this_crit)
-
-                if alt_matrix is None:
-                    flash(f"Lỗi tạo ma trận phương án cho tiêu chí '{crit_name_context}'.", "error")
-                    session['csv_input_error'] = True
-                    return redirect(url_for('upload_csv'))
-
-                alt_weights, alt_lambda_max, alt_ci, alt_cr, alt_ri = ahp_weighting(alt_matrix)
-                if alt_weights is None:
-                    flash(f"Lỗi tính toán AHP cho phương án theo tiêu chí '{crit_name_context}'.", "error")
-                    session['csv_input_error'] = True
-                    return redirect(url_for('upload_csv'))
-
-                if alt_cr is not None and alt_cr > CR_THRESHOLD:
-                    flash(f"CR cho phương án theo tiêu chí '{crit_name_context}' ({alt_cr:.4f}) vượt ngưỡng ({CR_THRESHOLD:.2f}). Kiểm tra lại file CSV.", "error")
-                    session['csv_input_error'] = True
-                    return redirect(url_for('upload_csv'))
-
-                # Lưu kết quả vào session['alt_..._all'] tại đúng chỉ số i
-                session['alt_matrices_all'][i] = alt_matrix.tolist()
-                session['alt_weights_all'][i] = alt_weights.tolist()
-                session['alt_lambda_max_all'][i] = alt_lambda_max
-                session['alt_ci_all'][i] = alt_ci
-                session['alt_cr_all'][i] = alt_cr
-                session['alt_ri_all'][i] = alt_ri
-
-            session['alternative_comparisons_done'] = True
-            session['current_alt_criterion_index'] = num_criteria # Đánh dấu đã xong tất cả so sánh PA
-
-            # Xóa dữ liệu CSV preview khỏi session sau khi xử lý thành công
-            session.pop('csv_preview_data', None)
-            session.pop('csv_filename', None)
-            session.pop('csv_input_error', None) # Quan trọng: xóa cờ lỗi
-            session.modified = True
-
-            flash("Dữ liệu từ file CSV đã được xử lý thành công. Xem kết quả.", "success")
-            return redirect(url_for('calculate_results'))
-
-        # --- Xử lý tải file lên để xem trước ---
-        if 'csv_file' not in request.files:
-            flash('Không có phần file nào trong request.', "error")
-            return redirect(request.url) # Redirect lại chính trang upload_csv
-        
-        file = request.files['csv_file']
-        if file.filename == '':
-            flash('Chưa chọn file nào.', "warning")
-            return redirect(request.url)
-
-        if file and allowed_csv_file(file.filename):
-            filename = secure_filename(file.filename)
-            # parse_single_csv_ahp_data giờ trả về 3 giá trị
-            # parsed_data_for_session chứa tất cả, bao gồm cả dữ liệu render
-            # error_msg là thông báo lỗi nếu có
-            # _ (raw_rows_debug) có thể bỏ qua ở đây nếu không dùng trực tiếp nữa
-            parsed_data_for_session, error_msg, _ = parse_single_csv_ahp_data(file)
-
-            if error_msg:
-                flash(f"Lỗi xử lý file CSV: {error_msg}", "error")
-                session.pop('csv_preview_data', None) # Xóa preview cũ nếu có lỗi
-                session.pop('csv_filename', None)
-                session['csv_input_error'] = True # Đặt cờ lỗi
-                session.modified = True
-                return redirect(url_for('upload_csv'))
-
-            if parsed_data_for_session:
-                session['csv_preview_data'] = parsed_data_for_session # Lưu toàn bộ dict mới, bao gồm cả phần render
-                session['csv_filename'] = filename
-                session.pop('csv_input_error', None) # Xóa cờ lỗi nếu parse thành công
-                flash(f"File '{filename}' đã được đọc. Kiểm tra dữ liệu hiển thị bên dưới và xác nhận nếu chính xác.", "info")
-            else: # Trường hợp hiếm: không có lỗi nhưng parsed_data là None
-                flash("Không thể phân tích cú pháp file CSV. Định dạng có thể không đúng.", "error")
-                session.pop('csv_preview_data', None)
-                session.pop('csv_filename', None)
-                session['csv_input_error'] = True
-            
-            session.modified = True
-            return redirect(url_for('upload_csv')) # Redirect để hiển thị preview với dữ liệu mới trong session
-        else:
-            flash("Loại file không được phép. Chỉ chấp nhận file .csv", "error")
-            session.pop('csv_preview_data', None)
-            session.pop('csv_filename', None)
-            session['csv_input_error'] = True
-            session.modified = True
-            return redirect(url_for('upload_csv'))
-
-    # --- GET request ---
-    # Lấy dữ liệu từ session để hiển thị
-    preview_data_from_session = session.get('csv_preview_data')
-    csv_filename = session.get('csv_filename')
-    csv_input_error = session.get('csv_input_error', False) # Mặc định là False
-    
-    criteria_names_render = None
-    alternatives_names_render = None
-    criteria_preview_matrix_render = None
-    alternatives_preview_matrices_render = None
-    preview_data_exists = False
-
-    # Chỉ chuẩn bị dữ liệu render nếu có preview_data và không có lỗi input nghiêm trọng
-    # (csv_input_error=True có thể vẫn cho phép hiển thị preview nếu parse_single_csv_ahp_data trả về một phần dữ liệu)
-    if preview_data_from_session: #and not csv_input_error: # Bỏ csv_input_error ở đây để vẫn có thể hiện thị nếu có lỗi nhẹ
-        criteria_names_render = preview_data_from_session.get('criteria_names')
-        alternatives_names_render = preview_data_from_session.get('alternatives_names')
-        criteria_preview_matrix_render = preview_data_from_session.get('criteria_preview_matrix_render')
-        alternatives_preview_matrices_render = preview_data_from_session.get('alternatives_preview_matrices_render')
-        preview_data_exists = True # Đặt cờ này để biết có nên hiển thị nút Confirm hay không
-
-    # Nếu có lỗi input và không có dữ liệu preview nào cả (ví dụ file rỗng, sai định dạng nặng)
-    # thì đảm bảo không có gì được render cho phần preview
-    if csv_input_error and not preview_data_exists:
-        criteria_names_render = None
-        alternatives_names_render = None
-        criteria_preview_matrix_render = None
-        alternatives_preview_matrices_render = None
-        csv_filename = None # Xóa cả tên file nếu lỗi nặng không parse được gì
-
-    return render_template("upload_csv.html",
-                           preview_data_exists=preview_data_exists,
-                           csv_filename=csv_filename,
-                           csv_input_error=csv_input_error,
-                           criteria_names_render=criteria_names_render,
-                           alternatives_names_render=alternatives_names_render,
-                           criteria_preview_matrix_render=criteria_preview_matrix_render,
-                           alternatives_preview_matrices_render=alternatives_preview_matrices_render
-                           )
 
 @app.route("/calculate_results")
 def calculate_results():
-    # ... (Validation checks hiện tại giữ nguyên) ...
     if not session.get('criteria_comparison_done'):
         flash("So sánh tiêu chí chưa hoàn thành hoặc CR không hợp lệ.", "warning")
         return redirect(url_for('compare_criteria'))
     num_criteria_val = len(session.get('selected_criteria', []))
     current_alt_index_val = session.get('current_alt_criterion_index', 0)
     if not session.get('alternative_comparisons_done'):
-        if current_alt_index_val >= num_criteria_val and num_criteria_val > 0 : # Allow if num_criteria is 0 (e.g. from CSV direct to results)
+        if current_alt_index_val >= num_criteria_val and num_criteria_val > 0 : 
             session['alternative_comparisons_done'] = True
             session.modified = True
         else:
@@ -1237,7 +991,7 @@ def calculate_results():
             return redirect(url_for('compare_alternatives'))
 
     num_alternatives = len(session.get('session_alternatives', []))
-    num_criteria = len(session.get('selected_criteria', [])) # Lấy lại ở đây cho đúng ngữ cảnh
+    num_criteria = len(session.get('selected_criteria', [])) 
     required_keys = {
         'crit_weights': (list, num_criteria), 'alt_weights_all': (list, num_criteria),
         'session_alternatives': (list, num_alternatives), 'selected_criteria': (list, num_criteria),
@@ -1273,8 +1027,7 @@ def calculate_results():
         error_message = "Dữ liệu session không đầy đủ/hợp lệ để tính kết quả: " + "; ".join(missing_or_invalid) + ". Vui lòng thử lại từ đầu."
         flash(error_message, "error")
         print("DEBUG: Session validation failed in calculate_results:", missing_or_invalid)
-        # clear_session_data() # Cân nhắc, nếu lỗi do CSV thì người dùng có thể muốn sửa CSV
-        return redirect(url_for('select_alternatives')) # Hoặc upload_csv nếu lỗi từ đó
+        return redirect(url_for('select_alternatives')) 
 
     final_scores_dict = {}
     results_display = []
@@ -1282,8 +1035,7 @@ def calculate_results():
     calculation_error = None
 
     try:
-        # ... (Phần tính toán điểm giữ nguyên) ...
-        crit_weights_np = np.array(session['crit_weights'], dtype=float) # Đổi tên biến để tránh xung đột
+        crit_weights_np = np.array(session['crit_weights'], dtype=float) 
         alt_weights_all_list = session['alt_weights_all']
         alt_weights_matrix = np.array(alt_weights_all_list, dtype=float).T
 
@@ -1330,7 +1082,6 @@ def calculate_results():
          calculation_error = f"Lỗi không mong muốn trong tính toán cuối cùng: {e}"
          flash(calculation_error, "error"); print(f"Unexpected Final Calc Error: {e}"); traceback.print_exc()
 
-    # --- Lưu vào DB (giữ nguyên logic hiện tại) ---
     can_save_to_db = session.get('all_db_alternatives', False) and session.get('all_db_criteria', False)
     save_attempted = False
     save_successful = False
@@ -1400,7 +1151,7 @@ def calculate_results():
                 save_successful = False
             finally:
                 if conn: conn.close()
-        else: # get_connection failed
+        else: 
             save_attempted = True; save_successful = False
     elif not can_save_to_db and not calculation_error:
         flash("Kết quả không lưu vào DB vì sử dụng dữ liệu tùy chỉnh.", "info")
@@ -1408,10 +1159,8 @@ def calculate_results():
         flash("Không có kết quả cuối cùng để hiển thị/lưu.", "warning")
 
 
-    # --- THÊM MỚI: Chuẩn bị dữ liệu cho biểu đồ ---
     chart_data = {}
     if not calculation_error and results_display:
-        # 1. Biểu đồ trọng số tiêu chí (Bar Chart)
         crit_names_for_chart = [c.get('ten_tieu_chi', f'TC {i+1}') for i, c in enumerate(session.get('selected_criteria', []))]
         crit_weights_for_chart = session.get('crit_weights', [])
         chart_data['criteria_weights'] = {
@@ -1419,8 +1168,6 @@ def calculate_results():
             "data": crit_weights_for_chart
         }
 
-        # 2. Biểu đồ điểm tổng hợp phương án (Horizontal Bar Chart)
-        # results_display đã được sắp xếp, có thể dùng trực tiếp
         alt_names_for_chart = [r['name'] for r in results_display]
         alt_scores_for_chart = [r['score'] for r in results_display]
         chart_data['final_scores'] = {
@@ -1428,34 +1175,22 @@ def calculate_results():
             "data": alt_scores_for_chart
         }
 
-        # 3. Biểu đồ trọng số phương án theo từng tiêu chí (Stacked Bar hoặc Grouped Bar)
-        # Đây là phần phức tạp hơn. Cần ma trận (phương án x tiêu chí) của trọng số cục bộ.
-        # alt_weights_all là list of lists: [[w_alt1_crit1, w_alt2_crit1,...], [w_alt1_crit2, w_alt2_crit2,...], ...]
-        # Cần chuyển vị (transpose) nó.
         alt_weights_matrix_for_chart = []
         if session.get('alt_weights_all') and num_alternatives > 0 and num_criteria > 0:
-            # session['alt_weights_all'] có dạng [crit_idx][alt_idx]
-            # cần [alt_idx][crit_idx] cho stacked bar chart datasets
             temp_matrix = np.array(session.get('alt_weights_all', [])).T.tolist() # Transpose
-            # Mỗi phần tử của temp_matrix bây giờ là một list trọng số của một phương án qua các tiêu chí
-            # [{label: 'PA1', data: [w_pa1tc1, w_pa1tc2,...]}, {label: 'PA2', data: [w_pa2tc1, ... ]}]
-            # Hoặc cho grouped bar: labels là tên tiêu chí, datasets là các phương án
-            # labels: [crit1, crit2, ...]
-            # datasets: [{label: PA1, data:[w_pa1c1, w_pa1c2,...]}, {label:PA2, data:[w_pa2c1, w_pa2c2,...]}]
             
-            # Dùng cho grouped bar (dễ nhìn hơn khi nhiều phương án)
             datasets_alt_by_crit = []
             all_alt_names = [a.get('ten_phuong_an', f'PA {i+1}') for i, a in enumerate(session.get('session_alternatives', []))]
 
-            if len(all_alt_names) == len(temp_matrix): # Đảm bảo kích thước khớp
+            if len(all_alt_names) == len(temp_matrix): 
                  for alt_idx, alt_name in enumerate(all_alt_names):
                     datasets_alt_by_crit.append({
                         "label": alt_name,
-                        "data": temp_matrix[alt_idx] # temp_matrix[alt_idx] là list trọng số của PA này qua các tiêu chí
+                        "data": temp_matrix[alt_idx] 
                     })
 
             chart_data['alternative_weights_by_criteria'] = {
-                "labels": crit_names_for_chart, # Tiêu chí trên trục X
+                "labels": crit_names_for_chart, 
                 "datasets": datasets_alt_by_crit
             }
 
@@ -1469,11 +1204,10 @@ def calculate_results():
                            save_successful=save_successful,
                            can_save_to_db=can_save_to_db,
                            error=calculation_error,
-                           chart_data=chart_data # <--- THÊM MỚI
+                           chart_data=chart_data
                            )
 
 def get_intermediate_results_for_display():
-    # ... (Giữ nguyên)
     intermediate = {}
     try:
         crit_keys = ['selected_criteria', 'crit_matrix', 'crit_weights', 'crit_lambda_max', 'crit_ci', 'crit_cr', 'crit_ri']
@@ -1490,15 +1224,360 @@ def get_intermediate_results_for_display():
             elif len(data) != num_crit_check:
                  flash(f"Cảnh báo hiển thị: Dữ liệu '{key}' độ dài ({len(data)}) không khớp ({num_crit_check}).", "warning")
                  intermediate[key] = (data + [None] * num_crit_check)[:num_crit_check]
-            # Bỏ qua check any(item is None) vì có thể None do lỗi CR/RI
     except Exception as e:
          flash(f"Lỗi chuẩn bị dữ liệu trung gian: {e}", "warning"); print(f"Error prep intermediate: {e}"); traceback.print_exc()
          intermediate = {}
     return intermediate
 
+# -*- coding: utf-8 -*-
+# ... (các import khác của bạn) ...
+# Giả sử các hàm compute_pairwise_matrix, ahp_weighting, allowed_csv_file,
+# parse_single_csv_ahp_data, clear_session_data đã được định nghĩa như trước
+# và MIN_CRITERIA, MIN_ALTERNATIVES, CR_THRESHOLD cũng đã có.
+
+def _prepare_renderable_matrices_and_crs(criteria_names, alternatives_names,
+                                         crit_comparisons_backend, alt_comparisons_backend_by_crit_name):
+    """
+    Hàm helper để tạo ma trận hiển thị và tính CR cho preview.
+    Input:
+        - criteria_names: list tên tiêu chí
+        - alternatives_names: list tên phương án
+        - crit_comparisons_backend: dict so sánh tiêu chí cho backend (key: pc_i_j)
+        - alt_comparisons_backend_by_crit_name: dict lồng, {crit_name: {alt_pc_critidx_alti_altj: val}}
+    Output:
+        - crit_preview_full_matrix_render: list of list
+        - alt_previews_full_matrices_render: dict {crit_name: list of list}
+        - preview_crs: dict {'criteria_cr': val, 'alternatives_cr_by_crit': {crit_name: val}}
+    """
+    num_crit = len(criteria_names)
+    num_alt = len(alternatives_names)
+    crit_name_to_idx = {name: i for i, name in enumerate(criteria_names)}
+
+    # 1. Criteria Preview Matrix (full) for rendering
+    crit_preview_full_matrix_render = np.ones((num_crit, num_crit), dtype=object)
+    for i in range(num_crit):
+        for j in range(num_crit):
+            if i == j:
+                crit_preview_full_matrix_render[i, j] = 1.0
+            elif i < j:
+                val = crit_comparisons_backend.get(f"pc_{i}_{j}")
+                crit_preview_full_matrix_render[i, j] = round(val, 4) if val is not None else "Thiếu"
+                crit_preview_full_matrix_render[j, i] = round(1.0 / val, 4) if val is not None and val != 0 else "Thiếu/0"
+            # else: pass (đã xử lý bởi i < j)
+    
+    # 2. Alternatives Preview Matrices (full) for rendering
+    alt_previews_full_matrices_render = {}
+    for crit_name_ctx, alt_comps_for_crit_backend in alt_comparisons_backend_by_crit_name.items():
+        crit_idx = crit_name_to_idx.get(crit_name_ctx) # Lấy index của tiêu chí hiện tại
+        if crit_idx is None: continue # Bỏ qua nếu tên tiêu chí không tìm thấy (lỗi dữ liệu)
+
+        alt_matrix_for_crit_render = np.ones((num_alt, num_alt), dtype=object)
+        for i in range(num_alt):
+            for j in range(num_alt):
+                if i == j:
+                    alt_matrix_for_crit_render[i, j] = 1.0
+                elif i < j:
+                    # Key cho backend dict là alt_pc_{crit_idx}_{alt_i}_{alt_j}
+                    val = alt_comps_for_crit_backend.get(f"alt_pc_{crit_idx}_{i}_{j}")
+                    alt_matrix_for_crit_render[i, j] = round(val, 4) if val is not None else "Thiếu"
+                    alt_matrix_for_crit_render[j, i] = round(1.0 / val, 4) if val is not None and val != 0 else "Thiếu/0"
+                # else: pass
+        alt_previews_full_matrices_render[crit_name_ctx] = alt_matrix_for_crit_render.tolist()
+
+    # 3. Calculate CRs for preview
+    preview_crs = {'criteria_cr': "N/A", 'alternatives_cr_by_crit': {}}
+    
+    # CR for criteria
+    temp_crit_matrix = compute_pairwise_matrix("pc", criteria_names, crit_comparisons_backend)
+    if temp_crit_matrix is not None:
+        _, _, _, crit_cr_preview, _ = ahp_weighting(temp_crit_matrix) # Bỏ qua các giá trị khác
+        preview_crs['criteria_cr'] = crit_cr_preview if crit_cr_preview is not None else "Lỗi tính CR"
+    
+    # CR for alternatives
+    for crit_idx_loop, crit_name_ctx_loop in enumerate(criteria_names): # Dùng enumerate để có crit_idx
+        alt_comps_for_crit_backend_loop = alt_comparisons_backend_by_crit_name.get(crit_name_ctx_loop, {})
+        # Sử dụng crit_idx_loop cho prefix khi gọi compute_pairwise_matrix
+        temp_alt_matrix = compute_pairwise_matrix(f"alt_pc_{crit_idx_loop}", alternatives_names, alt_comps_for_crit_backend_loop)
+        if temp_alt_matrix is not None:
+            _, _, _, alt_cr_preview, _ = ahp_weighting(temp_alt_matrix)
+            preview_crs['alternatives_cr_by_crit'][crit_name_ctx_loop] = alt_cr_preview if alt_cr_preview is not None else "Lỗi tính CR"
+        else:
+            preview_crs['alternatives_cr_by_crit'][crit_name_ctx_loop] = "Lỗi tạo ma trận"
+
+
+    return crit_preview_full_matrix_render.tolist(), alt_previews_full_matrices_render, preview_crs
+
+
+@app.route("/upload_csv", methods=["GET", "POST"])
+def upload_csv():
+    if request.method == "POST":
+        # --- Action 1: Xác nhận dữ liệu CSV và tiến hành tính toán AHP ---
+        if 'confirm_csv_data' in request.form:
+            csv_preview_data = session.get('csv_preview_data')
+            if not csv_preview_data:
+                flash("Không có dữ liệu CSV để xác nhận. Vui lòng tải lên lại.", "error")
+                return redirect(url_for('upload_csv'))
+
+            criteria_names = csv_preview_data.get('criteria_names')
+            alternatives_names = csv_preview_data.get('alternatives_names')
+            crit_comp_dict_for_backend = csv_preview_data.get('criteria_comparisons_dict') # Dùng cho backend
+            alt_comp_dict_by_crit_name_for_backend = csv_preview_data.get('alternatives_comparisons_dict') # Dùng cho backend
+
+            if not all([criteria_names, alternatives_names, crit_comp_dict_for_backend, alt_comp_dict_by_crit_name_for_backend]):
+                flash("Dữ liệu CSV trong session không đầy đủ để xác nhận. Vui lòng tải lại file.", "error")
+                session['csv_input_error'] = True
+                return redirect(url_for('upload_csv'))
+
+            clear_session_data()
+            session['session_alternatives'] = [{'id': None, 'ten_phuong_an': name} for name in alternatives_names]
+            session['selected_criteria'] = [{'id': None, 'ten_tieu_chi': name} for name in criteria_names]
+            session['all_db_alternatives'] = False
+            session['all_db_criteria'] = False
+            session['alternatives_selected'] = True
+            session['criteria_selected'] = True
+            num_criteria = len(criteria_names)
+
+            crit_matrix = compute_pairwise_matrix("pc", criteria_names, crit_comp_dict_for_backend)
+            if crit_matrix is None:
+                session['csv_input_error'] = True
+                return redirect(url_for('upload_csv'))
+            crit_weights, crit_lambda_max, crit_ci, crit_cr, crit_ri = ahp_weighting(crit_matrix)
+            if crit_weights is None:
+                session['csv_input_error'] = True
+                return redirect(url_for('upload_csv'))
+            if crit_cr is not None and crit_cr > CR_THRESHOLD:
+                flash(f"CR tiêu chí ({crit_cr:.4f}) > {CR_THRESHOLD:.2f}. Không thể tiếp tục.", "error")
+                session['csv_input_error'] = True # Giữ lại preview data để người dùng sửa
+                return redirect(url_for('upload_csv'))
+
+            session['crit_matrix'] = crit_matrix.tolist()
+            session['crit_weights'] = crit_weights.tolist()
+            session['crit_lambda_max'] = crit_lambda_max
+            session['crit_ci'] = crit_ci
+            session['crit_cr'] = crit_cr
+            session['crit_ri'] = crit_ri
+            session['criteria_comparison_done'] = True
+            
+            session['alt_matrices_all'] = [None] * num_criteria
+            session['alt_weights_all'] = [None] * num_criteria
+            session['alt_lambda_max_all'] = [None] * num_criteria
+            session['alt_ci_all'] = [None] * num_criteria
+            session['alt_cr_all'] = [None] * num_criteria
+            session['alt_ri_all'] = [None] * num_criteria
+
+
+            crit_name_to_idx = {name: i for i, name in enumerate(criteria_names)} # Map tên TC sang index
+            for crit_name_context, alt_comps_for_crit_backend in alt_comp_dict_by_crit_name_for_backend.items():
+                crit_idx = crit_name_to_idx.get(crit_name_context)
+                if crit_idx is None:
+                    flash(f"Lỗi logic: Không tìm thấy chỉ số cho tiêu chí context '{crit_name_context}'.", "error")
+                    session['csv_input_error'] = True
+                    return redirect(url_for('upload_csv'))
+
+                alt_matrix = compute_pairwise_matrix(f"alt_pc_{crit_idx}", alternatives_names, alt_comps_for_crit_backend)
+                if alt_matrix is None:
+                    session['csv_input_error'] = True
+                    return redirect(url_for('upload_csv'))
+                alt_weights, alt_lambda_max, alt_ci, alt_cr, alt_ri = ahp_weighting(alt_matrix)
+                if alt_weights is None:
+                    session['csv_input_error'] = True
+                    return redirect(url_for('upload_csv'))
+                if alt_cr is not None and alt_cr > CR_THRESHOLD:
+                    flash(f"CR cho PA theo '{crit_name_context}' ({alt_cr:.4f}) > {CR_THRESHOLD:.2f}. Không thể tiếp tục.", "error")
+                    session['csv_input_error'] = True
+                    return redirect(url_for('upload_csv'))
+                
+                session['alt_matrices_all'][crit_idx] = alt_matrix.tolist()
+                session['alt_weights_all'][crit_idx] = alt_weights.tolist()
+                # ... (lưu các session khác cho alternative tại crit_idx) ...
+                session['alt_lambda_max_all'][crit_idx] = alt_lambda_max
+                session['alt_ci_all'][crit_idx] = alt_ci
+                session['alt_cr_all'][crit_idx] = alt_cr
+                session['alt_ri_all'][crit_idx] = alt_ri
+
+            session['alternative_comparisons_done'] = True
+            session['current_alt_criterion_index'] = num_criteria
+            session.pop('csv_preview_data', None)
+            session.pop('csv_filename', None)
+            session.pop('csv_input_error', None)
+            session.modified = True
+            flash("Dữ liệu CSV đã xử lý. Xem kết quả.", "success")
+            return redirect(url_for('calculate_results'))
+
+        # --- Action 2: Cập nhật dữ liệu preview từ form sửa đổi và tính lại CR ---
+        elif 'update_preview_data' in request.form:
+            preview_data_to_update = session.get('csv_preview_data')
+            if not preview_data_to_update:
+                flash("Không có dữ liệu preview để cập nhật.", "error")
+                return redirect(url_for('upload_csv'))
+
+            original_criteria_names = preview_data_to_update['criteria_names']
+            original_alternatives_names = preview_data_to_update['alternatives_names']
+            
+            # Tạo bản sao của các dict comparisons_for_backend để cập nhật
+            updated_crit_comparisons_backend = preview_data_to_update['criteria_comparisons_dict'].copy()
+            updated_alt_comparisons_backend_by_crit_name = {
+                crit_name: comps.copy() for crit_name, comps in preview_data_to_update['alternatives_comparisons_dict'].items()
+            }
+            
+            has_form_errors = False # Cờ để theo dõi lỗi nhập liệu
+
+            # Cập nhật so sánh tiêu chí từ form
+            for i in range(len(original_criteria_names)):
+                for j in range(i + 1, len(original_criteria_names)):
+                    form_field_name = f"edited_crit_val_{i}_{j}"
+                    if form_field_name in request.form:
+                        try:
+                            new_val_str = request.form[form_field_name].strip()
+                            if not new_val_str: # Nếu người dùng xóa trắng ô input
+                                flash(f"Giá trị sửa đổi cho tiêu chí ({original_criteria_names[i]} vs {original_criteria_names[j]}) không được để trống.", "error")
+                                has_form_errors = True; continue
+                            new_val = float(eval(new_val_str))
+                            if new_val <= 0:
+                                flash(f"Giá trị sửa đổi cho tiêu chí ({original_criteria_names[i]} vs {original_criteria_names[j]}) phải dương: '{new_val_str}'", "error")
+                                has_form_errors = True; continue
+                            updated_crit_comparisons_backend[f"pc_{i}_{j}"] = new_val
+                        except Exception as e:
+                            flash(f"Giá trị sửa đổi không hợp lệ cho tiêu chí ({original_criteria_names[i]} vs {original_criteria_names[j]}): '{request.form[form_field_name]}'. Lỗi: {e}", "error")
+                            has_form_errors = True
+            
+            if has_form_errors: # Nếu có lỗi ở tiêu chí, không xử lý tiếp phương án, redirect ngay
+                session['csv_input_error'] = True # Giữ lại preview data nhưng báo lỗi
+                return redirect(url_for('upload_csv'))
+
+
+            # Cập nhật so sánh phương án từ form
+            crit_name_to_idx_map = {name: idx for idx, name in enumerate(original_criteria_names)}
+            for crit_name_ctx, alt_comps_backend in updated_alt_comparisons_backend_by_crit_name.items():
+                crit_idx_for_form = crit_name_to_idx_map.get(crit_name_ctx)
+                if crit_idx_for_form is None: continue # Lỗi logic, bỏ qua
+
+                for alt_i in range(len(original_alternatives_names)):
+                    for alt_j in range(alt_i + 1, len(original_alternatives_names)):
+                        form_field_name = f"edited_alt_val_{crit_idx_for_form}_{alt_i}_{alt_j}"
+                        if form_field_name in request.form:
+                            try:
+                                new_val_str = request.form[form_field_name].strip()
+                                if not new_val_str:
+                                    flash(f"Giá trị sửa đổi cho PA ({original_alternatives_names[alt_i]} vs {original_alternatives_names[alt_j]} theo TC '{crit_name_ctx}') không được để trống.", "error")
+                                    has_form_errors = True; continue
+                                new_val = float(eval(new_val_str))
+                                if new_val <= 0:
+                                    flash(f"Giá trị sửa đổi cho PA ({original_alternatives_names[alt_i]} vs {original_alternatives_names[alt_j]} theo TC '{crit_name_ctx}') phải dương: '{new_val_str}'", "error")
+                                    has_form_errors = True; continue
+                                # Key cho backend dict là alt_pc_{crit_idx_for_form}_{alt_i}_{alt_j}
+                                alt_comps_backend[f"alt_pc_{crit_idx_for_form}_{alt_i}_{alt_j}"] = new_val
+                            except Exception as e:
+                                flash(f"Giá trị sửa đổi không hợp lệ cho PA ({original_alternatives_names[alt_i]} vs {original_alternatives_names[alt_j]} theo TC '{crit_name_ctx}'): '{request.form[form_field_name]}'. Lỗi: {e}", "error")
+                                has_form_errors = True
+            
+            if has_form_errors:
+                session['csv_input_error'] = True
+                return redirect(url_for('upload_csv'))
+
+            # Cập nhật lại các dict backend trong session
+            preview_data_to_update['criteria_comparisons_dict'] = updated_crit_comparisons_backend
+            preview_data_to_update['alternatives_comparisons_dict'] = updated_alt_comparisons_backend_by_crit_name
+            
+            # Tính toán lại ma trận render và CRs bằng hàm helper
+            crit_render_new, alt_render_new, crs_new = _prepare_renderable_matrices_and_crs(
+                original_criteria_names, original_alternatives_names,
+                updated_crit_comparisons_backend, updated_alt_comparisons_backend_by_crit_name
+            )
+            preview_data_to_update['criteria_preview_matrix_render'] = crit_render_new
+            preview_data_to_update['alternatives_preview_matrices_render'] = alt_render_new
+            preview_data_to_update['preview_crs'] = crs_new
+            
+            session['csv_preview_data'] = preview_data_to_update
+            session.pop('csv_input_error', None) # Xóa cờ lỗi nếu cập nhật thành công
+            session.modified = True
+            flash("Dữ liệu preview đã được cập nhật và CR đã được tính lại.", "info")
+            return redirect(url_for('upload_csv'))
+
+        # --- Action 3: Tải file CSV lên lần đầu ---
+        if 'csv_file' not in request.files:
+            flash('Không có phần file nào trong request.', "error")
+            return redirect(request.url)
+        file = request.files['csv_file']
+        if file.filename == '':
+            flash('Chưa chọn file nào.', "warning")
+            return redirect(request.url)
+
+        if file and allowed_csv_file(file.filename):
+            filename = secure_filename(file.filename)
+            parsed_data_from_file, error_msg, _ = parse_single_csv_ahp_data(file)
+
+            if error_msg:
+                flash(f"Lỗi xử lý file CSV '{filename}': {error_msg}", "error")
+                session.pop('csv_preview_data', None)
+                session.pop('csv_filename', None)
+                session['csv_input_error'] = True
+                session.modified = True
+                return redirect(url_for('upload_csv'))
+
+            if parsed_data_from_file:
+                # Sau khi parse lần đầu, cũng cần tính toán CRs cho preview ban đầu
+                crit_render_init, alt_render_init, crs_init = _prepare_renderable_matrices_and_crs(
+                    parsed_data_from_file['criteria_names'], parsed_data_from_file['alternatives_names'],
+                    parsed_data_from_file['criteria_comparisons_dict'], parsed_data_from_file['alternatives_comparisons_dict']
+                )
+                # Gộp kết quả parse và kết quả render/CRs vào session
+                session_data_for_preview = {
+                    **parsed_data_from_file, # criteria_names, alternatives_names, *_comparisons_dict, parsed_rows_for_preview_raw
+                    'criteria_preview_matrix_render': crit_render_init,
+                    'alternatives_preview_matrices_render': alt_render_init,
+                    'preview_crs': crs_init
+                }
+                session['csv_preview_data'] = session_data_for_preview
+                session['csv_filename'] = filename
+                session.pop('csv_input_error', None)
+                flash(f"File '{filename}' đã được đọc. Kiểm tra dữ liệu và CR, sau đó có thể sửa đổi hoặc xác nhận.", "info")
+            else:
+                flash("Không thể phân tích cú pháp file CSV. Định dạng có thể không đúng.", "error")
+                session.pop('csv_preview_data', None)
+                session.pop('csv_filename', None)
+                session['csv_input_error'] = True
+            
+            session.modified = True
+            return redirect(url_for('upload_csv'))
+        else:
+            flash("Loại file không được phép. Chỉ chấp nhận file .csv", "error")
+            session.pop('csv_preview_data', None)
+            session.pop('csv_filename', None)
+            session['csv_input_error'] = True
+            session.modified = True
+            return redirect(url_for('upload_csv'))
+
+    preview_data_from_session = session.get('csv_preview_data')
+    csv_filename_display = session.get('csv_filename')
+    csv_input_error_display = session.get('csv_input_error', False)
+    
+    render_vars = {
+        "preview_data_exists": False,
+        "csv_filename": csv_filename_display,
+        "csv_input_error": csv_input_error_display,
+        "criteria_names_render": None,
+        "alternatives_names_render": None,
+        "criteria_preview_matrix_render": None,
+        "alternatives_preview_matrices_render": None,
+        "preview_crs_display": None
+    }
+
+    if preview_data_from_session: 
+        render_vars["preview_data_exists"] = True
+        render_vars["criteria_names_render"] = preview_data_from_session.get('criteria_names')
+        render_vars["alternatives_names_render"] = preview_data_from_session.get('alternatives_names')
+        render_vars["criteria_preview_matrix_render"] = preview_data_from_session.get('criteria_preview_matrix_render')
+        render_vars["alternatives_preview_matrices_render"] = preview_data_from_session.get('alternatives_preview_matrices_render')
+        render_vars["preview_crs_display"] = preview_data_from_session.get('preview_crs')
+    
+    if csv_input_error_display and not render_vars["preview_data_exists"]:
+        render_vars["csv_filename"] = None 
+
+    return render_template("upload_csv.html", **render_vars)
+
 @app.route("/results_history")
 def results_history():
-    # ... (Giữ nguyên)
     grouped_history = {}
     db_error = None
     group_query = """
@@ -1536,7 +1615,6 @@ def results_history():
     return render_template("results_history.html", history_list=sorted_history_list, db_error=db_error)
 
 
-# --- Error Handlers (Giữ nguyên) ---
 @app.errorhandler(404)
 def page_not_found(e):
      flash("Trang yêu cầu không được tìm thấy (404).", "error")
@@ -1559,9 +1637,7 @@ def request_entity_too_large(e):
     if 'criteria_selected' in session: return redirect(url_for('compare_criteria'))
     return redirect(url_for('select_alternatives'))
 
-# --- Main Execution (Giữ nguyên) ---
 if __name__ == "__main__":
-    # ... (Phần kiểm tra DB giữ nguyên) ...
     print("Kiểm tra kết nối cơ sở dữ liệu PostgreSQL...")
     conn_test = get_connection()
     if conn_test is None:

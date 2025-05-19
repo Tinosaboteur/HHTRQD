@@ -3,9 +3,25 @@
 <head>
   <meta charset="utf-8">
   <title>AHP - Nhập dữ liệu từ CSV</title>
+  <script src="{{ url_for('static', filename='validation.js') }}" defer></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <style>
-    .csv-instructions { /* ... giữ nguyên ... */ }
+    .csv-instructions {
+        background-color: #f0f8ff;
+        border: 1px solid #add8e6;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    .csv-instructions h4 { margin-top: 0; color: #337ab7; }
+    .csv-instructions ul { padding-left: 20px; margin-bottom: 0; }
+    .csv-instructions li { margin-bottom: 5px; }
+    .csv-instructions code {
+        background-color: #e8e8e8;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-family: Consolas, "Courier New", monospace;
+    }
     .preview-matrix-section {
         margin-top: 30px;
         padding: 20px;
@@ -24,19 +40,61 @@
         color: #555;
         font-size: 1.1em;
     }
-    /* Sử dụng lại style của comparison-matrix từ style.css */
-    table.comparison-matrix.preview { /* Thêm class 'preview' để có thể tùy chỉnh nếu cần */
-        font-size: 0.9em; /* Hơi nhỏ hơn ma trận nhập liệu */
+    table.comparison-matrix.preview {
+        font-size: 0.9em;
     }
     table.comparison-matrix.preview th, table.comparison-matrix.preview td {
         padding: 6px 8px;
+        vertical-align: top; /* Important for aligning input with message */
+    }
+    table.comparison-matrix.preview input[type="number"] {
+        width: 70px; /* Giống với input ở các trang khác */
+        padding: 4px;
+        text-align: center;
+        border: 1px solid var(--input-border);
+        border-radius: 2px;
+        -moz-appearance: textfield;
+    }
+    table.comparison-matrix.preview input[type="number"]::-webkit-outer-spin-button,
+    table.comparison-matrix.preview input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    td.readonly-cell { /* Cho đường chéo và nghịch đảo (nếu không dùng JS) */
+        background-color: #f0f0f0;
+        font-style: italic;
+        color: #666;
+        padding-top: 8px; /* Align text better with inputs */
     }
     .filename-display { font-style: italic; color: #555; margin-bottom: 15px; }
-    .raw-data-toggle { margin-top: 10px; margin-bottom: 10px; }
-    .raw-data-preview { display: none; /* Ẩn mặc định */ }
-    .preview-table-container { /* ... giữ nguyên ... */ }
-    .preview-table { /* ... giữ nguyên ... */ }
+    .cr-results-preview {
+        background-color: #e6f3ff; /* Light blue background for CR results */
+        border: 1px solid #b3d9ff;
+        padding: 10px 15px;
+        margin-top: 15px;
+        border-radius: 4px;
+    }
+    .cr-results-preview h4 { margin-top:0; color: #004085; font-size: 1.05em; }
+    .cr-results-preview p { margin: 4px 0; font-size: 0.95em; }
+    .button-group { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
 
+    /* Styles for validation messages from validation.js */
+    .validation-message {
+        display: block; /* Each message on a new line below input */
+        font-size: 0.8em;
+        color: var(--error-color, red); /* Default to red if var not defined */
+        margin-top: 3px;
+        min-height: 1.2em; /* Reserve space to prevent layout jumps */
+    }
+    /* Assuming alert styles are in style.css, if not, add basic ones here */
+    .alert.alert-error.form-submit-error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+        padding: .75rem 1.25rem;
+        margin-bottom: 1rem;
+        border-radius: .25rem;
+    }
   </style>
 </head>
 <body>
@@ -55,27 +113,20 @@
 
   <div class="csv-instructions">
     <h4>Hướng dẫn định dạng file CSV:</h4>
-    <!-- ... (giữ nguyên hướng dẫn) ... -->
     <ul>
       <li>File CSV không cần dòng tiêu đề (header row), hoặc nếu có, dòng tiêu đề sẽ được bỏ qua nếu cột đầu tiên là "TYPE".</li>
       <li>Mỗi dòng đại diện cho một so sánh cặp.</li>
       <li>Các cột cần có:
         <ol>
-          <li><strong>Loại (TYPE):</strong> <code>CRITERIA</code> (cho so sánh tiêu chí) hoặc <code>ALTERNATIVES</code> (cho so sánh phương án).</li>
-          <li><strong>Mục hàng (ITEM_ROW):</strong> Tên của tiêu chí/phương án ở hàng.</li>
-          <li><strong>Mục cột (ITEM_COL):</strong> Tên của tiêu chí/phương án ở cột.</li>
+          <li><strong>Loại (TYPE):</strong> <code>CRITERIA</code> hoặc <code>ALTERNATIVES</code>.</li>
+          <li><strong>Mục hàng (ITEM_ROW):</strong> Tên của tiêu chí/phương án.</li>
+          <li><strong>Mục cột (ITEM_COL):</strong> Tên của tiêu chí/phương án.</li>
           <li><strong>Giá trị (VALUE):</strong> Giá trị so sánh (ví dụ: <code>3</code>, <code>1/5</code>, <code>0.2</code>).</li>
-          <li><strong>Context Tiêu chí (CRITERION_CONTEXT):</strong> <em>Chỉ cần thiết khi Loại là <code>ALTERNATIVES</code></em>. Đây là tên của tiêu chí mà theo đó các phương án đang được so sánh.</li>
+          <li><strong>Context Tiêu chí (CRITERION_CONTEXT):</strong> Chỉ cần thiết khi Loại là <code>ALTERNATIVES</code>.</li>
         </ol>
       </li>
-      <li>Ví dụ một vài dòng:
-        <pre><code>CRITERIA,Học phí,Cơ hội việc làm,3
-CRITERIA,Học phí,Chất lượng đào tạo,1/2
-ALTERNATIVES,Ngành A,Ngành B,5,Học phí</code></pre>
-      </li>
-      <li>Đảm bảo tất cả tên tiêu chí và phương án là nhất quán trong toàn bộ file.</li>
       <li>Số lượng tiêu chí tối thiểu: {{ MIN_CRITERIA }}. Số lượng phương án tối thiểu: {{ MIN_ALTERNATIVES }}.</li>
-      <li>Tỷ lệ nhất quán (CR) cho mỗi ma trận phải ≤ {{ CR_THRESHOLD }}.</li>
+      <li>Tỷ lệ nhất quán (CR) cho mỗi ma trận phải ≤ {{ "%.2f"|format(CR_THRESHOLD) }}.</li>
     </ul>
   </div>
 
@@ -87,100 +138,249 @@ ALTERNATIVES,Ngành A,Ngành B,5,Học phí</code></pre>
     <input type="submit" value="Tải lên và Xem trước" class="btn">
   </form>
 
-  {# --- PHẦN HIỂN THỊ PREVIEW MỚI --- #}
-  {% if criteria_names_render and not csv_input_error %}
+  {% if preview_data_exists and not csv_input_error %}
     <div class="preview-matrix-section">
-      <h3>Xem trước dữ liệu từ file: <span class="filename-display">{{ csv_filename }}</span></h3>
-      <p>Dưới đây là các ma trận so sánh được trích xuất từ file CSV của bạn. Hãy kiểm tra kỹ lưỡng.</p>
+      <h3>Xem trước và Sửa đổi dữ liệu từ file: <span class="filename-display">{{ csv_filename }}</span></h3>
+      <p>Dưới đây là các ma trận so sánh được trích xuất từ file CSV. Bạn có thể sửa đổi các giá trị so sánh trực tiếp trong bảng (phần tam giác trên). Sau đó nhấn "Lưu thay đổi & Tính lại CR" để cập nhật.</p>
+      
+      <form method="post" action="{{ url_for('upload_csv') }}" id="editPreviewForm">
+      
+        {# --- Ma trận Tiêu chí --- #}
+        <h4>Ma trận so sánh Tiêu chí:</h4>
+        {% if criteria_names_render and criteria_preview_matrix_render %}
+        <table class="comparison-matrix excel-grid preview">
+          <thead>
+            <tr>
+              <th>Tiêu chí / Tiêu chí</th>
+              {% for name in criteria_names_render %}
+                <th>{{ name }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for i in range(criteria_names_render|length) %}
+            <tr>
+              <th>{{ criteria_names_render[i] }}</th>
+              {% for j in range(criteria_names_render|length) %}
+                  {% set cell_value = criteria_preview_matrix_render[i][j] %}
+                  {% if i == j %}
+                      <td class="diagonal readonly-cell">1.0000</td>
+                  {% elif i < j %} {# Ô nhập liệu cho tam giác trên #}
+                      <td>
+                          <input type="number" step="any" min="0.001" lang="en" class="comparison-input"
+                                 name="edited_crit_val_{{ i }}_{{ j }}"
+                                 value="{{ "%.4f"|format(cell_value) if cell_value is number else (cell_value if cell_value != 'Thiếu' and cell_value != 'Thiếu/0' else '') }}"
+                                 title="So sánh {{ criteria_names_render[i] }} với {{ criteria_names_render[j] }}">
+                          <span class="validation-message"></span> {# ADDED for validation.js #}
+                      </td>
+                  {% else %} {# Tam giác dưới, hiển thị giá trị nghịch đảo (sẽ được cập nhật bởi JS hoặc sau khi submit) #}
+                      <td class="reciprocal readonly-cell">
+                          {{ "%.4f"|format(cell_value) if cell_value is number else cell_value }}
+                      </td>
+                  {% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+          <p class="data-unavailable">Không có dữ liệu ma trận tiêu chí để hiển thị hoặc sửa đổi.</p>
+        {% endif %}
 
-      {# --- Ma trận Tiêu chí --- #}
-      <h4>Ma trận so sánh Tiêu chí:</h4>
-      {% if criteria_preview_matrix_render %}
-      <table class="comparison-matrix excel-grid preview">
-        <thead>
-          <tr>
-            <th>Tiêu chí / Tiêu chí</th>
-            {% for name in criteria_names_render %}
-              <th>{{ name }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-        {% for i in range(criteria_names_render|length) %}
-          <tr>
-            <th>{{ criteria_names_render[i] }}</th>
-            {% for j in range(criteria_names_render|length) %}
-                {% set cell_value = criteria_preview_matrix_render[i][j] %}
-                {% if i == j %}
-                    <td class="diagonal">{{ "%.4f"|format(cell_value) if cell_value is number else cell_value }}</td>
-                {% elif cell_value is number %}
-                    <td>{{ "%.4f"|format(cell_value) }}</td>
-                {% else %}
-                    <td class="reciprocal">{{ cell_value }}</td> {# Hiển thị '-' hoặc 'Lỗi' #}
-                {% endif %}
-            {% endfor %}
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-        <p class="data-unavailable">Không có dữ liệu ma trận tiêu chí để hiển thị.</p>
+        {# --- Ma trận Phương án theo từng Tiêu chí --- #}
+        {% if alternatives_names_render and alternatives_preview_matrices_render %}
+          {% for crit_name_ctx, alt_matrix_data in alternatives_preview_matrices_render.items() %}
+            {% set current_crit_idx = criteria_names_render.index(crit_name_ctx) if crit_name_ctx in criteria_names_render else -1 %}
+            <h4>Ma trận so sánh Phương án theo Tiêu chí: {{ crit_name_ctx }}</h4>
+            {% if current_crit_idx != -1 %}
+            <table class="comparison-matrix excel-grid preview">
+              <thead>
+                <tr>
+                  <th>{{ crit_name_ctx }}</th>
+                  {% for alt_name in alternatives_names_render %}
+                    <th>{{ alt_name }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+              {% for alt_i in range(alternatives_names_render|length) %}
+                <tr>
+                  <th>{{ alternatives_names_render[alt_i] }}</th>
+                  {% for alt_j in range(alternatives_names_render|length) %}
+                    {% set cell_value_alt = alt_matrix_data[alt_i][alt_j] %}
+                     {% if alt_i == alt_j %}
+                      <td class="diagonal readonly-cell">1.0000</td>
+                    {% elif alt_i < alt_j %}
+                      <td>
+                          <input type="number" step="any" min="0.001" lang="en" class="comparison-input"
+                                 name="edited_alt_val_{{ current_crit_idx }}_{{ alt_i }}_{{ alt_j }}"
+                                 value="{{ "%.4f"|format(cell_value_alt) if cell_value_alt is number else (cell_value_alt if cell_value_alt != 'Thiếu' and cell_value_alt != 'Thiếu/0' else '') }}"
+                                 title="So sánh {{ alternatives_names_render[alt_i] }} với {{ alternatives_names_render[alt_j] }} (theo {{ crit_name_ctx }})">
+                          <span class="validation-message"></span> {# ADDED for validation.js #}
+                      </td>
+                    {% else %}
+                      <td class="reciprocal readonly-cell">
+                          {{ "%.4f"|format(cell_value_alt) if cell_value_alt is number else cell_value_alt }}
+                      </td>
+                    {% endif %}
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+                <p class="data-unavailable">Lỗi: Không tìm thấy chỉ số cho tiêu chí context '{{ crit_name_ctx }}'.</p>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <p class="data-unavailable">Không có dữ liệu ma trận phương án để hiển thị hoặc sửa đổi.</p>
+        {% endif %}
+        
+        {# This div can be targeted by validation.js to show form-wide submission errors #}
+        {# The JS currently prepends it before .button-group if it exists, or appends to form #}
+        {# <div class="alert alert-error form-submit-error" style="display:none;"></div> #}
+
+        <div class="button-group">
+            <input type="submit" name="update_preview_data" value="Lưu thay đổi & Tính lại CR (Preview)" class="btn btn-warning">
+        </div>
+      </form> {# Kết thúc form editPreviewForm #}
+
+
+      {# Hiển thị CR đã tính cho Preview #}
+      {% if preview_crs_display %}
+      <div class="cr-results-preview">
+          <h4>Kết quả kiểm tra nhất quán (cho dữ liệu Preview hiện tại):</h4>
+          {% set crs = preview_crs_display %}
+          <p>CR Tiêu chí:
+              <strong>
+              {% if crs.criteria_cr is number %}
+                  {{"%.4f"|format(crs.criteria_cr)}}
+                  {% if crs.criteria_cr <= CR_THRESHOLD %}<span style="color:green;"> (✓ Nhất quán)</span>
+                  {% else %}<span style="color:red;"> (✗ Không nhất quán - Cần sửa lại)</span>{% endif %}
+              {% elif crs.criteria_cr == "N/A" %}N/A (Không đủ dữ liệu)
+              {% else %}<span style="color:red;">{{ crs.criteria_cr }}</span>
+              {% endif %}
+              </strong>
+          </p>
+          {% if crs.alternatives_cr_by_crit %}
+              {% for crit_name_for_cr, alt_cr_val in crs.alternatives_cr_by_crit.items() %}
+              <p>CR Phương án (theo {{ crit_name_for_cr }}):
+                  <strong>
+                  {% if alt_cr_val is number %}
+                      {{"%.4f"|format(alt_cr_val)}}
+                      {% if alt_cr_val <= CR_THRESHOLD %}<span style="color:green;"> (✓ Nhất quán)</span>
+                      {% else %}<span style="color:red;"> (✗ Không nhất quán - Cần sửa lại)</span>{% endif %}
+                  {% elif alt_cr_val == "N/A" %}N/A (Không đủ dữ liệu)
+                  {% else %}<span style="color:red;">{{ alt_cr_val }}</span>
+                  {% endif %}
+                  </strong>
+              </p>
+              {% endfor %}
+          {% endif %}
+      </div>
       {% endif %}
 
-      {# --- Ma trận Phương án theo từng Tiêu chí --- #}
-      {% if alternatives_preview_matrices_render and alternatives_names_render %}
-        {% for crit_name, alt_matrix_data in alternatives_preview_matrices_render.items() %}
-          <h4>Ma trận so sánh Phương án theo Tiêu chí: {{ crit_name }}</h4>
-          <table class="comparison-matrix excel-grid preview">
-            <thead>
-              <tr>
-                <th>{{ crit_name }}</th>
-                {% for alt_name in alternatives_names_render %}
-                  <th>{{ alt_name }}</th>
-                {% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-            {% for i in range(alternatives_names_render|length) %}
-              <tr>
-                <th>{{ alternatives_names_render[i] }}</th>
-                {% for j in range(alternatives_names_render|length) %}
-                  {% set cell_value_alt = alt_matrix_data[i][j] %}
-                   {% if i == j %}
-                    <td class="diagonal">{{ "%.4f"|format(cell_value_alt) if cell_value_alt is number else cell_value_alt }}</td>
-                {% elif cell_value_alt is number %}
-                    <td>{{ "%.4f"|format(cell_value_alt) }}</td>
-                {% else %}
-                    <td class="reciprocal">{{ cell_value_alt }}</td>
-                {% endif %}
-                {% endfor %}
-              </tr>
-            {% endfor %}
-            </tbody>
-          </table>
-        {% endfor %}
-      {% else %}
-        <p class="data-unavailable">Không có dữ liệu ma trận phương án để hiển thị.</p>
-      {% endif %}
-
-      {# Nút xác nhận #}
-      {% if preview_data_exists %} {# Chỉ hiển thị nút confirm nếu preview_data_exists (được truyền từ route) #}
+      {# Nút xác nhận cuối cùng #}
       <form method="post" action="{{ url_for('upload_csv') }}" style="margin-top:20px; border-top: 1px solid #eee; padding-top: 20px;">
         <input type="hidden" name="confirm_csv_data" value="true">
-        <p style="font-weight: bold;">Nếu dữ liệu trên là chính xác, bạn có thể xác nhận để tiến hành phân tích AHP.</p>
-        <input type="submit" value="Xác nhận và Tính toán Kết quả →" class="btn btn-success">
+        <p style="font-weight: bold;">Nếu tất cả dữ liệu và CR đã ổn, bạn có thể xác nhận để tiến hành phân tích AHP.</p>
+        <input type="submit" value="Xác nhận và Tính toán Kết quả Cuối cùng →" class="btn btn-success">
       </form>
-      {% endif %}
     </div>
   {% elif csv_filename and csv_input_error %}
-    <p style="color: var(--error-color); margin-top: 20px;">Đã xảy ra lỗi khi xử lý file <strong>{{ csv_filename }}</strong>. Vui lòng kiểm tra thông báo lỗi ở trên, sửa file và thử tải lên lại.</p>
+    <p style="color: var(--error-color, red); margin-top: 20px;">Đã xảy ra lỗi khi xử lý file <strong>{{ csv_filename }}</strong>. Vui lòng kiểm tra thông báo lỗi ở trên, sửa file và thử tải lên lại.</p>
+  {% elif csv_input_error %} {# Trường hợp lỗi chung không có tên file cụ thể #}
+     <p style="color: var(--error-color, red); margin-top: 20px;">Đã xảy ra lỗi. Vui lòng thử lại.</p>
   {% endif %}
-  {# --- KẾT THÚC PHẦN PREVIEW MỚI --- #}
 
 
   <div class="button-container" style="margin-top:30px;">
     <a href="{{ url_for('select_alternatives') }}" class="btn btn-secondary">← Quay lại Nhập thủ công</a>
   </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Hàm để cố gắng cập nhật các ô nghịch đảo một cách đơn giản
+    // Lưu ý: Điều này chỉ mang tính chất hiển thị, logic chính vẫn ở backend
+    function updateReciprocalDisplay(inputElement, table) {
+        const nameParts = inputElement.name.split('_'); // e.g., edited_crit_val_0_1 or edited_alt_val_critidx_alti_altj
+        if (nameParts.length < 4) return; // Không đủ thông tin
+
+        let rowIndex, colIndex, reciprocalCell;
+        let inputValue = inputElement.value;
+
+        if (nameParts[1] === 'crit') { // Tiêu chí
+            rowIndex = parseInt(nameParts[3]); // j
+            colIndex = parseInt(nameParts[2]); // i
+            try {
+                reciprocalCell = table.rows[rowIndex + 1].cells[colIndex + 1]; // +1 vì có header row/col
+            } catch (e) { return; }
+        } else if (nameParts[1] === 'alt') { // Phương án
+            if (nameParts.length < 5) return;
+            rowIndex = parseInt(nameParts[4]); // j
+            colIndex = parseInt(nameParts[3]); // i
+            try {
+                reciprocalCell = table.rows[rowIndex + 1].cells[colIndex + 1];
+            } catch (e) { return; }
+        } else {
+            return;
+        }
+        
+        if (reciprocalCell && reciprocalCell.classList.contains('reciprocal')) {
+            let numericValue;
+            // Try to parse fractions like "1/5" or decimals
+            if (inputValue.includes('/')) {
+                const parts = inputValue.split('/');
+                if (parts.length === 2 && !isNaN(parseFloat(parts[0])) && !isNaN(parseFloat(parts[1])) && parseFloat(parts[1]) !== 0) {
+                    numericValue = parseFloat(parts[0]) / parseFloat(parts[1]);
+                } else {
+                    numericValue = NaN;
+                }
+            } else {
+                numericValue = parseFloat(inputValue);
+            }
+
+            if (!isNaN(numericValue) && numericValue > 0) {
+                reciprocalCell.textContent = (1.0 / numericValue).toFixed(4);
+            } else if (inputValue.trim() === '') {
+                reciprocalCell.textContent = "Thiếu";
+            } else if (!isNaN(numericValue) && numericValue === 0) {
+                reciprocalCell.textContent = "Lỗi/0";
+            }
+             else {
+                reciprocalCell.textContent = "Lỗi"; // Or "N/A" if input is not a valid number/fraction
+            }
+        }
+    }
+
+    const allInputCells = document.querySelectorAll('table.preview input[type="number"].comparison-input');
+    allInputCells.forEach(input => {
+        input.addEventListener('input', function() {
+            const table = this.closest('table.preview');
+            updateReciprocalDisplay(this, table);
+            // The validation.js script will handle the validation styling and messages
+        });
+
+        // Initial formatting and reciprocal update on load (if needed)
+        // The `value` attribute in HTML is already formatted to "%.4f".
+        // The validation.js script will run on load for initial validation state.
+        // We might still want to ensure reciprocal cells are populated on load.
+        const table = input.closest('table.preview');
+        if (input.value) { // If there's an initial value
+            updateReciprocalDisplay(input, table); // Populate reciprocal
+             // The `value` attribute should already be formatted by Jinja to "%.4f" for numbers
+             // But if it was something like "1/5" that got parsed to a float, ensure it's .4f
+            if (input.value.includes('/')) {
+                // If users can type "1/5", this might reformat it after validation
+                // For now, let's assume values are decimal or validation.js handles this
+            } else if (!isNaN(parseFloat(input.value))) {
+                 // No, don't reformat here. Let validation.js handle validation and display suggestions.
+                 // If users type 0.33333, don't force it to 0.3333.
+            }
+        }
+    });
+});
+</script>
 
 </body>
 </html>

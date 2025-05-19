@@ -132,7 +132,7 @@
                     <h5>Ma trận so sánh cặp Phương án (theo Tiêu chí {{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }}):</h5>
                     {% if alt_matrix is iterable %}
                     <table class="comparison-matrix excel-grid matrix-table small-table">
-                         <thead><tr><th>P.án</th>
+                         <thead><tr><th>Phương án</th>
                                 {% for alt in intermediate.session_alternatives %}
                                     <th title="{{ alt.ten_phuong_an if alt is mapping else 'Lỗi Tên' }}">{{ loop.index }}</th>
                                 {% endfor %}</tr></thead>
