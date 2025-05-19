@@ -5,44 +5,26 @@
   <title>AHP - Bước 0: Chọn/Nhập Phương Án</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <style>
-    .mode-selection label { margin-right: 20px; cursor: pointer; }
-    .mode-selection input[type="radio"] { margin-right: 5px; }
-    #db-selection, #custom-input {
-      margin-top: 15px;
-      padding: 15px;
-      border: 1px dashed #ccc;
-      border-radius: 4px;
+    /* ... (các style hiện tại) ... */
+    .add-to-db-form {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #d4e8d4; /* Light green border */
+        background-color: #f0fff0; /* Honeydew */
+        border-radius: 4px;
     }
-    .custom-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 8px;
+    .add-to-db-form h4 { margin-top: 0; color: #2e8b57; /* SeaGreen */ }
+    .add-to-db-form input[type="text"] {
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        margin-right: 10px;
+        min-width: 250px;
     }
-    .custom-item input[type="text"] {
-      flex-grow: 1;
-      margin-right: 10px;
-      padding: 6px 8px;
-      border: 1px solid var(--input-border, #ccc);
-      border-radius: 3px;
-    }
-    .btn-add, .btn-remove {
-      padding: 2px 8px;
-      font-size: 16px;
-      cursor: pointer;
-      border: 1px solid #ccc;
-      border-radius: 3px;
-      line-height: 1;
-      margin-left: 5px;
-    }
-    .btn-remove { background-color: #fdd; border-color: #fbb; }
-    .btn-add { background-color: #dfd; border-color: #bfb; }
-    .error-message {
-      color: red;
-      font-weight: bold;
-      margin-top: 10px;
-    }
+    .alt-input-options { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px dashed #ccc;}
   </style>
   <script>
+    // ... (script hiện tại của bạn cho toggleAlternativeInput, addCustomInput, removeCustomInput) ...
     function toggleAlternativeInput(mode) {
       const dbSection = document.getElementById('db-selection');
       const customSection = document.getElementById('custom-input');
@@ -50,12 +32,21 @@
       customSection.style.display = (mode === 'custom') ? 'block' : 'none';
 
       dbSection.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = (mode === 'db'));
-      customSection.querySelectorAll('input[type="text"]').forEach(inp => inp.required = (mode === 'custom'));
+      // customSection.querySelectorAll('input[type="text"]').forEach(inp => inp.required = (mode === 'custom')); // Bỏ required vì có thể không nhập gì nếu chỉ thêm vào DB
 
       if (mode === 'db') {
-        customSection.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
-      } else {
-        dbSection.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = false);
+        customSection.querySelectorAll('input[type="text"]').forEach(inp => { inp.value = ''; inp.required = false; });
+      } else { // mode === 'custom'
+        dbSection.querySelectorAll('input[type="checkbox"]').forEach(chk => { chk.checked = false; chk.required = false; });
+        // Với custom, ít nhất MIN_ALTERNATIVES input đầu tiên phải required nếu custom mode được chọn
+        const customInputs = customSection.querySelectorAll('input[type="text"]');
+        customInputs.forEach((inp, idx) => {
+            if (idx < {{ MIN_ALTERNATIVES }}) {
+                inp.required = (mode === 'custom');
+            } else {
+                inp.required = false; // Các input thêm sau không bắt buộc
+            }
+        });
       }
     }
 
@@ -69,7 +60,7 @@
       input.type = 'text';
       input.name = inputName;
       input.placeholder = `${placeholder} ${count + 1}`;
-      input.required = true;
+      // input.required = false; // Các input thêm vào không bắt buộc phải điền
 
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
@@ -123,8 +114,13 @@
     <p class="error-message">Lỗi Database: {{ db_error }}</p>
   {% endif %}
 
+  <div class="alt-input-options">
+    <p>Bạn có thể chọn phương án từ Database, nhập tùy chỉnh, hoặc <a href="{{ url_for('upload_csv') }}">tải lên toàn bộ dữ liệu từ file CSV</a>.</p>
+  </div>
+
+
   <form method="post" action="{{ url_for('select_alternatives') }}">
-    <p>Vui lòng chọn cách bạn muốn xác định các phương án để so sánh:</p>
+    <p>Vui lòng chọn cách bạn muốn xác định các phương án để so sánh (nếu không dùng CSV):</p>
     <div class="mode-selection">
       <label>
         <input type="radio" name="mode" value="db" onclick="toggleAlternativeInput('db')" required> Sử dụng Database
@@ -177,7 +173,20 @@
     </div>
   </form>
 
-  <div class="button-container">
+  <!-- THÊM MỚI: Form thêm phương án vào DB -->
+  <div class="add-to-db-form">
+    <h4>Thêm Phương án mới vào Cơ sở dữ liệu</h4>
+    <form method="post" action="{{ url_for('add_item_to_db') }}">
+      <input type="hidden" name="item_type" value="alternative">
+      <label for="new_alt_name">Tên phương án mới:</label>
+      <input type="text" id="new_alt_name" name="new_item_name" required>
+      <input type="submit" value="Thêm vào DB" class="btn btn-success" style="background-color:var(--success-color);">
+    </form>
+  </div>
+  <!-- KẾT THÚC THÊM MỚI -->
+
+
+  <div class="button-container" style="border-top:none; padding-top:0; margin-top:15px;">
     <a href="{{ url_for('results_history') }}" class="btn btn-secondary">Xem lịch sử kết quả (Database)</a>
   </div>
 </body>

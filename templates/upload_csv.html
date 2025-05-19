@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>AHP - Nhập dữ liệu từ CSV</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .csv-instructions { /* ... giữ nguyên ... */ }
+    .preview-matrix-section {
+        margin-top: 30px;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 5px;
+        background-color: #fdfdfd;
+    }
+    .preview-matrix-section h3 {
+        margin-top: 0;
+        color: #333;
+        border-bottom: 1px dotted #ccc;
+        padding-bottom: 8px;
+    }
+    .preview-matrix-section h4 {
+        margin-top: 15px;
+        color: #555;
+        font-size: 1.1em;
+    }
+    /* Sử dụng lại style của comparison-matrix từ style.css */
+    table.comparison-matrix.preview { /* Thêm class 'preview' để có thể tùy chỉnh nếu cần */
+        font-size: 0.9em; /* Hơi nhỏ hơn ma trận nhập liệu */
+    }
+    table.comparison-matrix.preview th, table.comparison-matrix.preview td {
+        padding: 6px 8px;
+    }
+    .filename-display { font-style: italic; color: #555; margin-bottom: 15px; }
+    .raw-data-toggle { margin-top: 10px; margin-bottom: 10px; }
+    .raw-data-preview { display: none; /* Ẩn mặc định */ }
+    .preview-table-container { /* ... giữ nguyên ... */ }
+    .preview-table { /* ... giữ nguyên ... */ }
+
+  </style>
+</head>
+<body>
+  <h1>Hệ hỗ trợ ra quyết định chọn ngành học theo AHP</h1>
+  <h2>Nhập dữ liệu từ một file CSV duy nhất</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="csv-instructions">
+    <h4>Hướng dẫn định dạng file CSV:</h4>
+    <!-- ... (giữ nguyên hướng dẫn) ... -->
+    <ul>
+      <li>File CSV không cần dòng tiêu đề (header row), hoặc nếu có, dòng tiêu đề sẽ được bỏ qua nếu cột đầu tiên là "TYPE".</li>
+      <li>Mỗi dòng đại diện cho một so sánh cặp.</li>
+      <li>Các cột cần có:
+        <ol>
+          <li><strong>Loại (TYPE):</strong> <code>CRITERIA</code> (cho so sánh tiêu chí) hoặc <code>ALTERNATIVES</code> (cho so sánh phương án).</li>
+          <li><strong>Mục hàng (ITEM_ROW):</strong> Tên của tiêu chí/phương án ở hàng.</li>
+          <li><strong>Mục cột (ITEM_COL):</strong> Tên của tiêu chí/phương án ở cột.</li>
+          <li><strong>Giá trị (VALUE):</strong> Giá trị so sánh (ví dụ: <code>3</code>, <code>1/5</code>, <code>0.2</code>).</li>
+          <li><strong>Context Tiêu chí (CRITERION_CONTEXT):</strong> <em>Chỉ cần thiết khi Loại là <code>ALTERNATIVES</code></em>. Đây là tên của tiêu chí mà theo đó các phương án đang được so sánh.</li>
+        </ol>
+      </li>
+      <li>Ví dụ một vài dòng:
+        <pre><code>CRITERIA,Học phí,Cơ hội việc làm,3
+CRITERIA,Học phí,Chất lượng đào tạo,1/2
+ALTERNATIVES,Ngành A,Ngành B,5,Học phí</code></pre>
+      </li>
+      <li>Đảm bảo tất cả tên tiêu chí và phương án là nhất quán trong toàn bộ file.</li>
+      <li>Số lượng tiêu chí tối thiểu: {{ MIN_CRITERIA }}. Số lượng phương án tối thiểu: {{ MIN_ALTERNATIVES }}.</li>
+      <li>Tỷ lệ nhất quán (CR) cho mỗi ma trận phải ≤ {{ CR_THRESHOLD }}.</li>
+    </ul>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('upload_csv') }}">
+    <div class="file-input-container" style="margin-bottom: 20px;">
+        <label for="csv_file" class="file-input-label">Chọn file CSV (.csv):</label>
+        <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
+    </div>
+    <input type="submit" value="Tải lên và Xem trước" class="btn">
+  </form>
+
+  {# --- PHẦN HIỂN THỊ PREVIEW MỚI --- #}
+  {% if criteria_names_render and not csv_input_error %}
+    <div class="preview-matrix-section">
+      <h3>Xem trước dữ liệu từ file: <span class="filename-display">{{ csv_filename }}</span></h3>
+      <p>Dưới đây là các ma trận so sánh được trích xuất từ file CSV của bạn. Hãy kiểm tra kỹ lưỡng.</p>
+
+      {# --- Ma trận Tiêu chí --- #}
+      <h4>Ma trận so sánh Tiêu chí:</h4>
+      {% if criteria_preview_matrix_render %}
+      <table class="comparison-matrix excel-grid preview">
+        <thead>
+          <tr>
+            <th>Tiêu chí / Tiêu chí</th>
+            {% for name in criteria_names_render %}
+              <th>{{ name }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+        {% for i in range(criteria_names_render|length) %}
+          <tr>
+            <th>{{ criteria_names_render[i] }}</th>
+            {% for j in range(criteria_names_render|length) %}
+                {% set cell_value = criteria_preview_matrix_render[i][j] %}
+                {% if i == j %}
+                    <td class="diagonal">{{ "%.4f"|format(cell_value) if cell_value is number else cell_value }}</td>
+                {% elif cell_value is number %}
+                    <td>{{ "%.4f"|format(cell_value) }}</td>
+                {% else %}
+                    <td class="reciprocal">{{ cell_value }}</td> {# Hiển thị '-' hoặc 'Lỗi' #}
+                {% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p class="data-unavailable">Không có dữ liệu ma trận tiêu chí để hiển thị.</p>
+      {% endif %}
+
+      {# --- Ma trận Phương án theo từng Tiêu chí --- #}
+      {% if alternatives_preview_matrices_render and alternatives_names_render %}
+        {% for crit_name, alt_matrix_data in alternatives_preview_matrices_render.items() %}
+          <h4>Ma trận so sánh Phương án theo Tiêu chí: {{ crit_name }}</h4>
+          <table class="comparison-matrix excel-grid preview">
+            <thead>
+              <tr>
+                <th>{{ crit_name }}</th>
+                {% for alt_name in alternatives_names_render %}
+                  <th>{{ alt_name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+            {% for i in range(alternatives_names_render|length) %}
+              <tr>
+                <th>{{ alternatives_names_render[i] }}</th>
+                {% for j in range(alternatives_names_render|length) %}
+                  {% set cell_value_alt = alt_matrix_data[i][j] %}
+                   {% if i == j %}
+                    <td class="diagonal">{{ "%.4f"|format(cell_value_alt) if cell_value_alt is number else cell_value_alt }}</td>
+                {% elif cell_value_alt is number %}
+                    <td>{{ "%.4f"|format(cell_value_alt) }}</td>
+                {% else %}
+                    <td class="reciprocal">{{ cell_value_alt }}</td>
+                {% endif %}
+                {% endfor %}
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        {% endfor %}
+      {% else %}
+        <p class="data-unavailable">Không có dữ liệu ma trận phương án để hiển thị.</p>
+      {% endif %}
+
+      {# Nút xác nhận #}
+      {% if preview_data_exists %} {# Chỉ hiển thị nút confirm nếu preview_data_exists (được truyền từ route) #}
+      <form method="post" action="{{ url_for('upload_csv') }}" style="margin-top:20px; border-top: 1px solid #eee; padding-top: 20px;">
+        <input type="hidden" name="confirm_csv_data" value="true">
+        <p style="font-weight: bold;">Nếu dữ liệu trên là chính xác, bạn có thể xác nhận để tiến hành phân tích AHP.</p>
+        <input type="submit" value="Xác nhận và Tính toán Kết quả →" class="btn btn-success">
+      </form>
+      {% endif %}
+    </div>
+  {% elif csv_filename and csv_input_error %}
+    <p style="color: var(--error-color); margin-top: 20px;">Đã xảy ra lỗi khi xử lý file <strong>{{ csv_filename }}</strong>. Vui lòng kiểm tra thông báo lỗi ở trên, sửa file và thử tải lên lại.</p>
+  {% endif %}
+  {# --- KẾT THÚC PHẦN PREVIEW MỚI --- #}
+
+
+  <div class="button-container" style="margin-top:30px;">
+    <a href="{{ url_for('select_alternatives') }}" class="btn btn-secondary">← Quay lại Nhập thủ công</a>
+  </div>
+
+</body>
+</html>

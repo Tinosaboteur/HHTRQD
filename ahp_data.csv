@@ -1,0 +1,40 @@
+CRITERIA,Hoc Phi,Co Hoi Viec Lam,2
+CRITERIA,Hoc Phi,Chat Luong Dao Tao,0.5
+CRITERIA,Hoc Phi,Dia Diem,3
+CRITERIA,Hoc Phi,Dam Me,4
+CRITERIA,Co Hoi Viec Lam,Chat Luong Dao Tao,0.25
+CRITERIA,Co Hoi Viec Lam,Dia Diem,1
+CRITERIA,Co Hoi Viec Lam,Dam Me,3
+CRITERIA,Chat Luong Dao Tao,Dia Diem,5
+CRITERIA,Chat Luong Dao Tao,Dam Me,6
+CRITERIA,Dia Diem,Dam Me,2
+ALTERNATIVES,Nganh Marketing,Nganh Ke Toan,3,Hoc Phi
+ALTERNATIVES,Nganh Marketing,Nganh IT,0.5,Hoc Phi
+ALTERNATIVES,Nganh Marketing,Nganh Du Lich,2,Hoc Phi
+ALTERNATIVES,Nganh Ke Toan,Nganh IT,0.2,Hoc Phi
+ALTERNATIVES,Nganh Ke Toan,Nganh Du Lich,0.5,Hoc Phi
+ALTERNATIVES,Nganh IT,Nganh Du Lich,4,Hoc Phi
+ALTERNATIVES,Nganh Marketing,Nganh Ke Toan,2,Co Hoi Viec Lam
+ALTERNATIVES,Nganh Marketing,Nganh IT,0.333333333,Co Hoi Viec Lam
+ALTERNATIVES,Nganh Marketing,Nganh Du Lich,1,Co Hoi Viec Lam
+ALTERNATIVES,Nganh Ke Toan,Nganh IT,0.25,Co Hoi Viec Lam
+ALTERNATIVES,Nganh Ke Toan,Nganh Du Lich,0.5,Co Hoi Viec Lam
+ALTERNATIVES,Nganh IT,Nganh Du Lich,3,Co Hoi Viec Lam
+ALTERNATIVES,Nganh Marketing,Nganh Ke Toan,1,Chat Luong Dao Tao
+ALTERNATIVES,Nganh Marketing,Nganh IT,0.5,Chat Luong Dao Tao
+ALTERNATIVES,Nganh Marketing,Nganh Du Lich,2,Chat Luong Dao Tao
+ALTERNATIVES,Nganh Ke Toan,Nganh IT,0.333333333,Chat Luong Dao Tao
+ALTERNATIVES,Nganh Ke Toan,Nganh Du Lich,1,Chat Luong Dao Tao
+ALTERNATIVES,Nganh IT,Nganh Du Lich,4,Chat Luong Dao Tao
+ALTERNATIVES,Nganh Marketing,Nganh Ke Toan,2,Dia Diem
+ALTERNATIVES,Nganh Marketing,Nganh IT,3,Dia Diem
+ALTERNATIVES,Nganh Marketing,Nganh Du Lich,0.5,Dia Diem
+ALTERNATIVES,Nganh Ke Toan,Nganh IT,2,Dia Diem
+ALTERNATIVES,Nganh Ke Toan,Nganh Du Lich,0.25,Dia Diem
+ALTERNATIVES,Nganh IT,Nganh Du Lich,0.333333333,Dia Diem
+ALTERNATIVES,Nganh Marketing,Nganh Ke Toan,4,Dam Me
+ALTERNATIVES,Nganh Marketing,Nganh IT,5,Dam Me
+ALTERNATIVES,Nganh Marketing,Nganh Du Lich,2,Dam Me
+ALTERNATIVES,Nganh Ke Toan,Nganh IT,2,Dam Me
+ALTERNATIVES,Nganh Ke Toan,Nganh Du Lich,0.5,Dam Me
+ALTERNATIVES,Nganh IT,Nganh Du Lich,0.333333333,Dam Me
