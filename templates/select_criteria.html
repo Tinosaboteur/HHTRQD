@@ -15,7 +15,7 @@
         dbSection.style.display = (mode === 'db') ? 'block' : 'none';
         customSection.style.display = (mode === 'custom') ? 'block' : 'none';
 
-        if(dbArea) dbArea.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = (mode === 'db'));
+        if(dbArea) dbArea.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = falsez);
         
         if(customContainer){
             const customInputs = customContainer.querySelectorAll('input[type="text"]');

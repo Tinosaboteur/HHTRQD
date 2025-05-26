@@ -40,20 +40,29 @@ def inject_global_constants():
         MIN_ALTERNATIVES=MIN_ALTERNATIVES,
         json=json 
     )
-
 def get_connection():
     conn = None
-    database_url = 'postgresql://admin:RSWYnshjkpXraGp5THCjSIaxUdtIwE4Z@dpg-d03iae2li9vc73fmjp60-a.singapore-postgres.render.com/test_2s9p'
-    if not database_url:
-        print("Database connection error: DATABASE_URL environment variable not set.")
-        flash("Lỗi cấu hình: Không tìm thấy chuỗi kết nối cơ sở dữ liệu.", "error")
-        return None
+    # --- THAY ĐỔI Ở ĐÂY ---
+    # Cấu hình kết nối database local trực tiếp
+    db_name_local = "hhtrqd"
+    user_local = "postgres"
+    password_local = "01020304" # Cẩn thận khi hardcode mật khẩu
+    host_local = "localhost"
+    port_local = "5432"
+
     try:
-        conn = psycopg2.connect(database_url) 
+        # Sử dụng các tham số riêng lẻ
+        conn = psycopg2.connect(
+            dbname=db_name_local,
+            user=user_local,
+            password=password_local,
+            host=host_local,
+            port=port_local
+        )
         return conn
     except psycopg2.OperationalError as e:
         print(f"Database connection error (Operational): {e}")
-        flash(f"Lỗi kết nối Database: Không thể kết nối tới server. Kiểm tra lại chuỗi kết nối và trạng thái DB.", "error")
+        flash(f"Lỗi kết nối Database: Không thể kết nối tới server. Kiểm tra lại thông tin kết nối và trạng thái DB.", "error")
         return None
     except psycopg2.Error as e:
         print(f"Database connection error: {e}")
@@ -1214,6 +1223,61 @@ def get_intermediate_results_for_display():
         alt_keys = ['session_alternatives', 'alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all']
         for key in crit_keys + alt_keys:
             intermediate[key] = session.get(key)
+        
+        # Start: New calculations for consistency vector table
+        crit_matrix_list = intermediate.get('crit_matrix')
+        crit_weights_list = intermediate.get('crit_weights')
+        selected_criteria_list = intermediate.get('selected_criteria')
+
+        if isinstance(crit_matrix_list, list) and \
+           isinstance(crit_weights_list, list) and \
+           isinstance(selected_criteria_list, list) and \
+           selected_criteria_list and \
+           len(crit_matrix_list) == len(selected_criteria_list) and \
+           all(isinstance(row, list) and len(row) == len(selected_criteria_list) for row in crit_matrix_list) and \
+           len(crit_weights_list) == len(selected_criteria_list):
+            
+            try:
+                num_crit = len(selected_criteria_list)
+                crit_matrix_np = np.array(crit_matrix_list, dtype=float)
+                crit_weights_np = np.array(crit_weights_list, dtype=float)
+
+                if crit_matrix_np.shape == (num_crit, num_crit) and crit_weights_np.shape == (num_crit,):
+                    # Calculate M_weighted: M_weighted[i, j] = M_orig[i, j] * W_crit[j]
+                    # This broadcasts W_crit (as a 1D array) to multiply element-wise with each column of M_orig.
+                    crit_weighted_matrix_np = crit_matrix_np * crit_weights_np.reshape(1, -1) # Ensure W_crit is broadcast as a row
+
+                    crit_weighted_sum_value_np = np.sum(crit_weighted_matrix_np, axis=1) # Sum across columns for each row
+
+                    crit_consistency_vector_np = np.zeros_like(crit_weighted_sum_value_np, dtype=float)
+                    # Avoid division by zero or very small weights
+                    non_zero_weights_mask = np.abs(crit_weights_np) > 1e-9 
+                    
+                    if np.any(non_zero_weights_mask):
+                        crit_consistency_vector_np[non_zero_weights_mask] = \
+                            crit_weighted_sum_value_np[non_zero_weights_mask] / crit_weights_np[non_zero_weights_mask]
+                    
+                    # Mark results from zero/small weights as NaN so they become None for Jinja
+                    crit_consistency_vector_np[~non_zero_weights_mask] = np.nan 
+
+                    intermediate['crit_weighted_matrix'] = [[(None if np.isnan(x) or np.isinf(x) else float(x)) for x in row] for row in crit_weighted_matrix_np.tolist()]
+                    intermediate['crit_weighted_sum_value'] = [(None if np.isnan(x) or np.isinf(x) else float(x)) for x in crit_weighted_sum_value_np.tolist()]
+                    
+                    crit_consistency_vector_list_final = []
+                    for val in crit_consistency_vector_np:
+                        if np.isnan(val) or np.isinf(val):
+                            crit_consistency_vector_list_final.append(None)
+                        else:
+                            crit_consistency_vector_list_final.append(float(val))
+                    intermediate['crit_consistency_vector'] = crit_consistency_vector_list_final
+                else:
+                    flash("Cảnh báo hiển thị: Kích thước ma trận/vector trọng số tiêu chí không khớp để tính chi tiết vector nhất quán.", "warning")
+            except Exception as e_calc:
+                flash(f"Lỗi tính toán dữ liệu cho bảng chi tiết vector nhất quán: {e_calc}", "error")
+                print(f"Error calculating consistency vector table data: {e_calc}")
+                traceback.print_exc()
+        # End: New calculations
+
         num_crit_check = len(intermediate.get('selected_criteria', [])) if isinstance(intermediate.get('selected_criteria'), list) else 0
         alt_lists_to_check = ['alt_matrices_all', 'alt_weights_all', 'alt_lambda_max_all', 'alt_ci_all', 'alt_cr_all', 'alt_ri_all']
         for key in alt_lists_to_check:
@@ -1229,11 +1293,6 @@ def get_intermediate_results_for_display():
          intermediate = {}
     return intermediate
 
-# -*- coding: utf-8 -*-
-# ... (các import khác của bạn) ...
-# Giả sử các hàm compute_pairwise_matrix, ahp_weighting, allowed_csv_file,
-# parse_single_csv_ahp_data, clear_session_data đã được định nghĩa như trước
-# và MIN_CRITERIA, MIN_ALTERNATIVES, CR_THRESHOLD cũng đã có.
 
 def _prepare_renderable_matrices_and_crs(criteria_names, alternatives_names,
                                          crit_comparisons_backend, alt_comparisons_backend_by_crit_name):

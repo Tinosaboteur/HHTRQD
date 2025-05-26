@@ -4,14 +4,13 @@
     <meta charset="UTF-8">
     <title>AHP - Kết quả cuối cùng</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <!-- THÊM MỚI: Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* ... (các style hiện tại của bạn) ... */
         .chart-container {
             width: 100%;
-            max-width: 700px; /* Điều chỉnh nếu cần */
-            margin: 20px auto; /* Canh giữa biểu đồ */
+            max-width: 700px;
+            margin: 20px auto;
             padding: 15px;
             background-color: #fff;
             border: 1px solid #ddd;
@@ -25,248 +24,325 @@
             border-bottom: 1px solid #eee;
             padding-bottom: 8px;
         }
+        /* Thêm style cho nút mới nếu cần */
+        .btn-info {
+            background-color: #17a2b8;
+            border-color: #17a2b8;
+            color: white;
+        }
+        .btn-info:hover {
+            background-color: #138496;
+            border-color: #117a8b;
+        }
     </style>
 </head>
 <body>
-    <h1>Kết quả phân tích AHP</h1>
+    <!-- THÊM MỚI: Wrapper cho nội dung cần xuất PDF -->
+    <div id="results-content-to-export">
+        <h1>Kết quả phân tích AHP</h1>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="flash-messages">
-        {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
-        {% endfor %}
-        </div>
-        {% endif %}
-    {% endwith %}
-
-    {% if error %}
-        <div class="error-message">Lỗi Tính Toán: {{ error }}</div>
-        <p class="data-unavailable">Do lỗi xảy ra, dữ liệu chi tiết dưới đây có thể không đầy đủ hoặc không chính xác.</p>
-    {% endif %}
-
-    {# ====================== SECTION 1: SUMMARY OF CALCULATIONS (Giữ nguyên) ====================== #}
-    {% if intermediate %}
-    <h2>1. Tóm tắt quá trình tính toán</h2>
-    {# ... (Nội dung chi tiết tính toán tiêu chí và phương án theo tiêu chí giữ nguyên) ... #}
-    <div class="results-section details-section">
-        <details {% if error %}open{% endif %}>
-            <summary>Chi tiết tính toán Tiêu chí (Nhấn để xem)</summary>
-            <!-- Nội dung ma trận tiêu chí, trọng số, CR -->
-            {% if intermediate.crit_matrix is iterable and intermediate.selected_criteria is iterable %}
-            <h4>Ma trận so sánh cặp Tiêu chí:</h4>
-            <table class="comparison-matrix excel-grid matrix-table">
-                <thead>
-                    <tr>
-                        <th>Tiêu chí</th>
-                        {% for crit in intermediate.selected_criteria %}
-                            <th>{{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }} {% if crit is mapping and crit.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for crit_i in intermediate.selected_criteria %}
-                    {% set i = loop.index0 %}
-                    <tr>
-                        <th>{{ crit_i.ten_tieu_chi if crit_i is mapping else 'Lỗi Tên' }} {% if crit_i is mapping and crit_i.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</th>
-                        {% if i < intermediate.crit_matrix|length and intermediate.crit_matrix[i] is iterable %}
-                            {% for crit_j in intermediate.selected_criteria %}
-                                {% set j = loop.index0 %}
-                                {% if j < intermediate.crit_matrix[i]|length and intermediate.crit_matrix[i][j] is number %}
-                                     <td>{{ "%.3f"|format(intermediate.crit_matrix[i][j]) }}</td>
-                                {% else %}
-                                     <td class="data-unavailable">N/A</td>
-                                {% endif %}
-                            {% endfor %}
-                        {% else %}
-                             <td colspan="{{ intermediate.selected_criteria|length }}" class="data-unavailable">Dữ liệu hàng lỗi</td>
-                        {% endif %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %} <p class="data-unavailable">Không có dữ liệu ma trận tiêu chí.</p> {% endif %}
-
-            <h4>Trọng số Tiêu chí:</h4>
-             {% if intermediate.crit_weights is iterable and intermediate.selected_criteria is iterable and intermediate.crit_weights|length == intermediate.selected_criteria|length %}
-             <ul class="weight-list">
-                {% for crit in intermediate.selected_criteria %}
-                    {% set i = loop.index0 %}
-                    <li><strong>{{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }} {% if crit is mapping and crit.id is none %}<small>(Tùy chỉnh)</small>{% endif %}:</strong>
-                        {% if i < intermediate.crit_weights|length and intermediate.crit_weights[i] is number %}
-                             {{ "%.4f"|format(intermediate.crit_weights[i]) }}
-                        {% else %} <span class="data-unavailable">N/A</span> {% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-             {% else %} <p class="data-unavailable">Không có dữ liệu trọng số tiêu chí.</p> {% endif %}
-
-            {% if intermediate.crit_cr is number %}
-            <div class="consistency-info">
-                (λmax = {{ "%.4f"|format(intermediate.crit_lambda_max) if intermediate.crit_lambda_max is number else 'N/A' }},
-                 CI = {{ "%.4f"|format(intermediate.crit_ci) if intermediate.crit_ci is number else 'N/A' }},
-                 RI (n={{ intermediate.selected_criteria|length if intermediate.selected_criteria is iterable else '?' }}) = {{ "%.2f"|format(intermediate.crit_ri) if intermediate.crit_ri is number else RI_DICT.get(intermediate.selected_criteria|length, 'N/A') }},
-                 CR = <strong>{{ "%.4f"|format(intermediate.crit_cr) }}</strong>
-                 {% if intermediate.crit_cr <= CR_THRESHOLD %} <span style="color:green;">(✓ Nhất quán)</span> {% else %} <span style="color:red;">(✗ Không nhất quán)</span> {% endif %})
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="flash-messages">
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
             </div>
-            {% elif intermediate.crit_lambda_max is not none %}
-             <div class="consistency-info">(λmax = {{ "%.4f"|format(intermediate.crit_lambda_max) if intermediate.crit_lambda_max is number else 'N/A' }}, CI/CR không có)</div>
             {% endif %}
-        </details>
-    </div>
+        {% endwith %}
 
-    <div class="results-section details-section">
-         <details {% if error %}open{% endif %}>
-            <summary>Chi tiết tính toán Phương án theo từng Tiêu chí (Nhấn để xem)</summary>
-            {% if intermediate.selected_criteria is iterable and intermediate.session_alternatives is iterable and intermediate.alt_matrices_all is iterable and intermediate.alt_weights_all is iterable %}
-                {% for crit in intermediate.selected_criteria %}
-                    {% set i = loop.index0 %}
-                    <h4>Tiêu chí: {{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }} {% if crit is mapping and crit.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</h4>
-                    {% set alt_matrix = intermediate.alt_matrices_all[i] if i < intermediate.alt_matrices_all|length else None %}
-                    {% set alt_weights = intermediate.alt_weights_all[i] if i < intermediate.alt_weights_all|length else None %}
-                    {% set alt_lambda_max = intermediate.alt_lambda_max_all[i] if i < intermediate.alt_lambda_max_all|length else None %}
-                    {% set alt_ci = intermediate.alt_ci_all[i] if i < intermediate.alt_ci_all|length else None %}
-                    {% set alt_cr = intermediate.alt_cr_all[i] if i < intermediate.alt_cr_all|length else None %}
-                    {% set alt_ri = intermediate.alt_ri_all[i] if i < intermediate.alt_ri_all|length else None %}
+        {% if error %}
+            <div class="error-message">Lỗi Tính Toán: {{ error }}</div>
+            <p class="data-unavailable">Do lỗi xảy ra, dữ liệu chi tiết dưới đây có thể không đầy đủ hoặc không chính xác.</p>
+        {% endif %}
 
-                    <h5>Ma trận so sánh cặp Phương án (theo Tiêu chí {{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }}):</h5>
-                    {% if alt_matrix is iterable %}
-                    <table class="comparison-matrix excel-grid matrix-table small-table">
-                         <thead><tr><th>Phương án</th>
-                                {% for alt in intermediate.session_alternatives %}
-                                    <th title="{{ alt.ten_phuong_an if alt is mapping else 'Lỗi Tên' }}">{{ loop.index }}</th>
-                                {% endfor %}</tr></thead>
-                         <tbody>
-                            {% for alt_j in intermediate.session_alternatives %}
-                            {% set j = loop.index0 %}
-                            <tr><th>{{ loop.index }}. {{ alt_j.ten_phuong_an if alt_j is mapping else 'Lỗi Tên' }} {% if alt_j is mapping and alt_j.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</th>
-                                 {% if j < alt_matrix|length and alt_matrix[j] is iterable %}
-                                    {% for alt_k in intermediate.session_alternatives %}
-                                        {% set k = loop.index0 %}
-                                        {% if k < alt_matrix[j]|length and alt_matrix[j][k] is number %}
-                                             <td>{{ "%.3f"|format(alt_matrix[j][k]) }}</td>
-                                        {% else %} <td class="data-unavailable">N/A</td> {% endif %}
-                                    {% endfor %}
-                                {% else %} <td colspan="{{ intermediate.session_alternatives|length }}" class="data-unavailable">Dữ liệu hàng lỗi</td> {% endif %}
-                            </tr>
+        {# ====================== SECTION 1: SUMMARY OF CALCULATIONS ====================== #}
+        {% if intermediate %}
+        <h2>1. Tóm tắt quá trình tính toán</h2>
+        <div class="results-section details-section">
+            <details {% if error %}open{% endif %}>
+                <summary>Chi tiết tính toán Tiêu chí (Nhấn để xem)</summary>
+                {% if intermediate.crit_matrix is iterable and intermediate.selected_criteria is iterable %}
+                <h4>Ma trận so sánh cặp Tiêu chí (Ma trận gốc):</h4>
+                <table class="comparison-matrix excel-grid matrix-table">
+                    <thead>
+                        <tr>
+                            <th>Tiêu chí</th>
+                            {% for crit in intermediate.selected_criteria %}
+                                <th>{{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }} {% if crit is mapping and crit.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</th>
                             {% endfor %}
-                        </tbody>
-                    </table>
-                    {% else %} <p class="data-unavailable">Không có dữ liệu ma trận cho tiêu chí này.</p> {% endif %}
-
-                    <h5>Trọng số cục bộ (theo Tiêu chí {{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }}):</h5>
-                    {% if alt_weights is iterable and alt_weights|length == intermediate.session_alternatives|length %}
-                     <ul class="weight-list">
-                         {% for alt in intermediate.session_alternatives %}
-                            {% set j = loop.index0 %}
-                            <li><strong>{{ loop.index }}. {{ alt.ten_phuong_an if alt is mapping else 'Lỗi Tên' }} {% if alt is mapping and alt.id is none %}<small>(Tùy chỉnh)</small>{% endif %}:</strong>
-                                {% if j < alt_weights|length and alt_weights[j] is number %}
-                                    {{ "%.4f"|format(alt_weights[j]) }}
-                                {% else %} <span class="data-unavailable">N/A</span> {% endif %}
-                             </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %} <p class="data-unavailable">Không có dữ liệu trọng số cục bộ.</p> {% endif %}
-
-                    {% if alt_cr is number %}
-                    <div class="consistency-info">
-                        (λmax = {{ "%.4f"|format(alt_lambda_max) if alt_lambda_max is number else 'N/A' }},
-                         CI = {{ "%.4f"|format(alt_ci) if alt_ci is number else 'N/A' }},
-                         RI (n={{ intermediate.session_alternatives|length if intermediate.session_alternatives is iterable else '?'}}) = {{ "%.2f"|format(alt_ri) if alt_ri is number else RI_DICT.get(intermediate.session_alternatives|length, 'N/A') }},
-                         CR = <strong>{{ "%.4f"|format(alt_cr) }}</strong>
-                         {% if alt_cr <= CR_THRESHOLD %} <span style="color:green;">(✓ Nhất quán)</span> {% else %} <span style="color:red;">(✗ Không nhất quán)</span> {% endif %})
-                    </div>
-                     {% elif alt_lambda_max is not none %}
-                     <div class="consistency-info">(λmax = {{ "%.4f"|format(alt_lambda_max) if alt_lambda_max is number else 'N/A' }}, CI/CR không có)</div>
-                    {% endif %} <hr style="margin: 15px 0;">
-                {% endfor %}
-            {% else %} <p class="data-unavailable">Thiếu dữ liệu trung gian cho phương án.</p> {% endif %}
-        </details>
-    </div>
-    {% endif %}
-
-
-    {# ====================== SECTION 2: FINAL RESULTS ====================== #}
-    {% if not error and results %}
-    <h2>2. Kết quả tổng hợp và xếp hạng</h2>
-    <div class="results-section">
-        <h3>Điểm tổng hợp và xếp hạng các Phương án (Ngành học)</h3>
-            <table class="final-results-table excel-grid">
-                <thead><tr><th>Xếp hạng</th><th>Ngành học (Phương án)</th><th>Điểm tổng hợp</th><th>Lựa chọn tốt nhất?</th></tr></thead>
-                <tbody>
-                    {% for row in results %}
-                    {% if row is mapping and 'name' in row and 'score' in row and 'is_best' in row %}
-                        <tr {% if row.is_best %}class="best-choice"{% endif %}>
-                            <td>{{ loop.index }}</td>
-                            <td>{{ row.name }} {% if row.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</td>
-                            <td><strong>{{ "%.5f"|format(row.score) }}</strong></td>
-                            <td>{% if row.is_best %}🏆 Có{% else %}Không{% endif %}</td>
                         </tr>
-                    {% else %} <tr><td colspan="4" class="data-unavailable">Lỗi hiển thị dòng kết quả</td></tr> {% endif %}
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for crit_i in intermediate.selected_criteria %}
+                        {% set i = loop.index0 %}
+                        <tr>
+                            <th>{{ crit_i.ten_tieu_chi if crit_i is mapping else 'Lỗi Tên' }} {% if crit_i is mapping and crit_i.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</th>
+                            {% if i < intermediate.crit_matrix|length and intermediate.crit_matrix[i] is iterable %}
+                                {% for crit_j in intermediate.selected_criteria %}
+                                    {% set j = loop.index0 %}
+                                    {% if j < intermediate.crit_matrix[i]|length and intermediate.crit_matrix[i][j] is number %}
+                                         <td>{{ "%.3f"|format(intermediate.crit_matrix[i][j]) }}</td>
+                                    {% else %}
+                                         <td class="data-unavailable">N/A</td>
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                 <td colspan="{{ intermediate.selected_criteria|length }}" class="data-unavailable">Dữ liệu hàng lỗi</td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %} <p class="data-unavailable">Không có dữ liệu ma trận tiêu chí.</p> {% endif %}
 
-            {% if best_alternative_info is mapping and 'name' in best_alternative_info and 'score' in best_alternative_info %}
-            <div class="final-summary">
-                Dựa trên các đánh giá của bạn, ngành học phù hợp nhất là: <br>
-                <strong>{{ best_alternative_info.name }} {% if best_alternative_info.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</strong>
-                 ({{ "%.5f"|format(best_alternative_info.score) }} điểm)
+                <h4>Trọng số Tiêu chí (W_crit):</h4>
+                 {% if intermediate.crit_weights is iterable and intermediate.selected_criteria is iterable and intermediate.crit_weights|length == intermediate.selected_criteria|length %}
+                 <ul class="weight-list">
+                    {% for crit in intermediate.selected_criteria %}
+                        {% set i = loop.index0 %}
+                        <li><strong>{{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }} {% if crit is mapping and crit.id is none %}<small>(Tùy chỉnh)</small>{% endif %}:</strong>
+                            {% if i < intermediate.crit_weights|length and intermediate.crit_weights[i] is number %}
+                                 {{ "%.4f"|format(intermediate.crit_weights[i]) }}
+                            {% else %} <span class="data-unavailable">N/A</span> {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+                 {% else %} <p class="data-unavailable">Không có dữ liệu trọng số tiêu chí.</p> {% endif %}
+
+                {% if intermediate.crit_weighted_matrix is iterable and
+                      intermediate.crit_weighted_sum_value is iterable and 
+                      intermediate.crit_weights is iterable and 
+                      intermediate.crit_consistency_vector is iterable and
+                      intermediate.selected_criteria is iterable and
+                      intermediate.crit_weighted_matrix|length == intermediate.selected_criteria|length and
+                      intermediate.crit_weighted_sum_value|length == intermediate.selected_criteria|length and
+                      intermediate.crit_weights|length == intermediate.selected_criteria|length and
+                      intermediate.crit_consistency_vector|length == intermediate.selected_criteria|length %}
+                <h4 style="margin-top: 20px;">Chi tiết tính Vector nhất quán (dựa trên ma trận "Weighted")</h4>
+                <p><small>Ma trận "Weighted" (các cột đầu tiên dưới đây) được tính bằng cách nhân mỗi cột của ma trận so sánh cặp tiêu chí gốc với trọng số (W_crit) tương ứng của tiêu chí đó.</small></p>
+                <table class="comparison-matrix excel-grid matrix-table">
+                    <thead>
+                        <tr>
+                            <th>Tiêu chí (Hàng)</th>
+                            {% for crit_col_header in intermediate.selected_criteria %}
+                                <th>{{ crit_col_header.ten_tieu_chi if crit_col_header is mapping else 'Lỗi Tên Col' }} <br></th>
+                            {% endfor %}
+                            <th>Weighted Sum Value <br></th>
+                            <th>Criteria Weights <br></th>
+                            <th>Consistency Vector <br></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for crit_row_item in intermediate.selected_criteria %}
+                        {% set i = loop.index0 %}
+                        <tr>
+                            <th>{{ crit_row_item.ten_tieu_chi if crit_row_item is mapping else 'Lỗi Tên Row' }} {% if crit_row_item is mapping and crit_row_item.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</th>
+                            {% if i < intermediate.crit_weighted_matrix|length and intermediate.crit_weighted_matrix[i] is iterable %}
+                                {% for crit_col_data_item in intermediate.selected_criteria %}
+                                    {% set j = loop.index0 %}
+                                    {% if j < intermediate.crit_weighted_matrix[i]|length and intermediate.crit_weighted_matrix[i][j] is number %}
+                                        <td>{{ "%.4f"|format(intermediate.crit_weighted_matrix[i][j]) }}</td>
+                                    {% else %}
+                                        <td class="data-unavailable">N/A</td>
+                                    {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <td colspan="{{ intermediate.selected_criteria|length }}" class="data-unavailable">Dữ liệu M_weighted lỗi</td>
+                            {% endif %}
+                            {% if i < intermediate.crit_weighted_sum_value|length and intermediate.crit_weighted_sum_value[i] is number %}
+                                <td><strong>{{ "%.4f"|format(intermediate.crit_weighted_sum_value[i]) }}</strong></td>
+                            {% else %}
+                                <td class="data-unavailable">N/A</td>
+                            {% endif %}
+                            {% if i < intermediate.crit_weights|length and intermediate.crit_weights[i] is number %}
+                                <td>{{ "%.4f"|format(intermediate.crit_weights[i]) }}</td>
+                            {% else %}
+                                <td class="data-unavailable">N/A</td>
+                            {% endif %}
+                            {% if i < intermediate.crit_consistency_vector|length and intermediate.crit_consistency_vector[i] is number %}
+                                <td><strong>{{ "%.4f"|format(intermediate.crit_consistency_vector[i]) }}</strong></td>
+                            {% else %}
+                                <td class="data-unavailable">N/A (có thể trọng số=0)</td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                    <p class="data-unavailable" style="margin-top:15px;">Không thể hiển thị bảng chi tiết vector nhất quán do thiếu dữ liệu.</p>
+                {% endif %}
+
+                {% if intermediate.crit_cr is number %}
+                <div class="consistency-info" style="margin-top: 15px;">
+                    (λmax = {{ "%.4f"|format(intermediate.crit_lambda_max) if intermediate.crit_lambda_max is number else 'N/A' }},
+                     CI = {{ "%.4f"|format(intermediate.crit_ci) if intermediate.crit_ci is number else 'N/A' }},
+                     RI (n={{ intermediate.selected_criteria|length if intermediate.selected_criteria is iterable else '?' }}) = {{ "%.2f"|format(intermediate.crit_ri) if intermediate.crit_ri is number else RI_DICT.get(intermediate.selected_criteria|length, 'N/A') }},
+                     CR = <strong>{{ "%.4f"|format(intermediate.crit_cr) }}</strong>
+                     {% if intermediate.crit_cr <= CR_THRESHOLD %} <span style="color:green;">(✓ Nhất quán)</span> {% else %} <span style="color:red;">(✗ Không nhất quán)</span> {% endif %})
+                </div>
+                {% elif intermediate.crit_lambda_max is not none %}
+                 <div class="consistency-info" style="margin-top: 15px;">(λmax = {{ "%.4f"|format(intermediate.crit_lambda_max) if intermediate.crit_lambda_max is number else 'N/A' }}, CI/CR không có)</div>
+                {% endif %}
+            </details>
+        </div>
+
+        <div class="results-section details-section">
+             <details {% if error %}open{% endif %}>
+                <summary>Chi tiết tính toán Phương án theo từng Tiêu chí (Nhấn để xem)</summary>
+                {% if intermediate.selected_criteria is iterable and intermediate.session_alternatives is iterable and intermediate.alt_matrices_all is iterable and intermediate.alt_weights_all is iterable %}
+                    {% for crit in intermediate.selected_criteria %}
+                        {% set i = loop.index0 %}
+                        <h4>Tiêu chí: {{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }} {% if crit is mapping and crit.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</h4>
+                        {% set alt_matrix = intermediate.alt_matrices_all[i] if i < intermediate.alt_matrices_all|length else None %}
+                        {% set alt_weights = intermediate.alt_weights_all[i] if i < intermediate.alt_weights_all|length else None %}
+                        {% set alt_lambda_max = intermediate.alt_lambda_max_all[i] if i < intermediate.alt_lambda_max_all|length else None %}
+                        {% set alt_ci = intermediate.alt_ci_all[i] if i < intermediate.alt_ci_all|length else None %}
+                        {% set alt_cr = intermediate.alt_cr_all[i] if i < intermediate.alt_cr_all|length else None %}
+                        {% set alt_ri = intermediate.alt_ri_all[i] if i < intermediate.alt_ri_all|length else None %}
+
+                        <h5>Ma trận so sánh cặp Phương án (theo Tiêu chí {{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }}):</h5>
+                        {% if alt_matrix is iterable %}
+                        <table class="comparison-matrix excel-grid matrix-table small-table">
+                             <thead><tr><th>Phương án</th>
+                                    {% for alt in intermediate.session_alternatives %}
+                                        <th title="{{ alt.ten_phuong_an if alt is mapping else 'Lỗi Tên' }}">{{ loop.index }}</th>
+                                    {% endfor %}</tr></thead>
+                             <tbody>
+                                {% for alt_j in intermediate.session_alternatives %}
+                                {% set j = loop.index0 %}
+                                <tr><th>{{ loop.index }}. {{ alt_j.ten_phuong_an if alt_j is mapping else 'Lỗi Tên' }} {% if alt_j is mapping and alt_j.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</th>
+                                     {% if j < alt_matrix|length and alt_matrix[j] is iterable %}
+                                        {% for alt_k in intermediate.session_alternatives %}
+                                            {% set k = loop.index0 %}
+                                            {% if k < alt_matrix[j]|length and alt_matrix[j][k] is number %}
+                                                 <td>{{ "%.3f"|format(alt_matrix[j][k]) }}</td>
+                                            {% else %} <td class="data-unavailable">N/A</td> {% endif %}
+                                        {% endfor %}
+                                    {% else %} <td colspan="{{ intermediate.session_alternatives|length }}" class="data-unavailable">Dữ liệu hàng lỗi</td> {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %} <p class="data-unavailable">Không có dữ liệu ma trận cho tiêu chí này.</p> {% endif %}
+
+                        <h5>Trọng số cục bộ (theo Tiêu chí {{ crit.ten_tieu_chi if crit is mapping else 'Lỗi Tên' }}):</h5>
+                        {% if alt_weights is iterable and alt_weights|length == intermediate.session_alternatives|length %}
+                         <ul class="weight-list">
+                             {% for alt in intermediate.session_alternatives %}
+                                {% set j = loop.index0 %}
+                                <li><strong>{{ loop.index }}. {{ alt.ten_phuong_an if alt is mapping else 'Lỗi Tên' }} {% if alt is mapping and alt.id is none %}<small>(Tùy chỉnh)</small>{% endif %}:</strong>
+                                    {% if j < alt_weights|length and alt_weights[j] is number %}
+                                        {{ "%.4f"|format(alt_weights[j]) }}
+                                    {% else %} <span class="data-unavailable">N/A</span> {% endif %}
+                                 </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %} <p class="data-unavailable">Không có dữ liệu trọng số cục bộ.</p> {% endif %}
+
+                        {% if alt_cr is number %}
+                        <div class="consistency-info">
+                            (λmax = {{ "%.4f"|format(alt_lambda_max) if alt_lambda_max is number else 'N/A' }},
+                             CI = {{ "%.4f"|format(alt_ci) if alt_ci is number else 'N/A' }},
+                             RI (n={{ intermediate.session_alternatives|length if intermediate.session_alternatives is iterable else '?'}}) = {{ "%.2f"|format(alt_ri) if alt_ri is number else RI_DICT.get(intermediate.session_alternatives|length, 'N/A') }},
+                             CR = <strong>{{ "%.4f"|format(alt_cr) }}</strong>
+                             {% if alt_cr <= CR_THRESHOLD %} <span style="color:green;">(✓ Nhất quán)</span> {% else %} <span style="color:red;">(✗ Không nhất quán)</span> {% endif %})
+                        </div>
+                         {% elif alt_lambda_max is not none %}
+                         <div class="consistency-info">(λmax = {{ "%.4f"|format(alt_lambda_max) if alt_lambda_max is number else 'N/A' }}, CI/CR không có)</div>
+                        {% endif %} <hr style="margin: 15px 0;">
+                    {% endfor %}
+                {% else %} <p class="data-unavailable">Thiếu dữ liệu trung gian cho phương án.</p> {% endif %}
+            </details>
+        </div>
+        {% endif %}
+
+
+        {# ====================== SECTION 2: FINAL RESULTS ====================== #}
+        {% if not error and results %}
+        <h2>2. Kết quả tổng hợp và xếp hạng</h2>
+        <div class="results-section">
+            <h3>Điểm tổng hợp và xếp hạng các Phương án (Ngành học)</h3>
+                <table class="final-results-table excel-grid">
+                    <thead><tr><th>Xếp hạng</th><th>Ngành học (Phương án)</th><th>Điểm tổng hợp</th><th>Lựa chọn tốt nhất?</th></tr></thead>
+                    <tbody>
+                        {% for row in results %}
+                        {% if row is mapping and 'name' in row and 'score' in row and 'is_best' in row %}
+                            <tr {% if row.is_best %}class="best-choice"{% endif %}>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ row.name }} {% if row.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</td>
+                                <td><strong>{{ "%.5f"|format(row.score) }}</strong></td>
+                                <td>{% if row.is_best %}🏆 Có{% else %}Không{% endif %}</td>
+                            </tr>
+                        {% else %} <tr><td colspan="4" class="data-unavailable">Lỗi hiển thị dòng kết quả</td></tr> {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                {% if best_alternative_info is mapping and 'name' in best_alternative_info and 'score' in best_alternative_info %}
+                <div class="final-summary">
+                    Dựa trên các đánh giá của bạn, ngành học phù hợp nhất là: <br>
+                    <strong>{{ best_alternative_info.name }} {% if best_alternative_info.id is none %}<small>(Tùy chỉnh)</small>{% endif %}</strong>
+                     ({{ "%.5f"|format(best_alternative_info.score) }} điểm)
+                </div>
+                {% endif %}
+
+                 <div class="db-save-info">
+                 {% if save_attempted %}
+                    {% if save_successful %} <p style="color:green;">Kết quả (từ DB) đã được lưu.</p>
+                    {% else %} <p style="color:red;">Lưu kết quả vào DB thất bại.</p> {% endif %}
+                 {% elif not can_save_to_db %}
+                     <p style="color:orange;">Kết quả không lưu vào DB (dữ liệu tùy chỉnh).</p>
+                 {% endif %}
+                </div>
+        </div>
+
+        {# --- Khu vực biểu đồ --- #}
+        {% if chart_data %}
+        <div class="results-section charts-section">
+            <h2>3. Trực quan hóa dữ liệu</h2>
+
+            {% if chart_data.criteria_weights and chart_data.criteria_weights.labels and chart_data.criteria_weights.data %}
+            <div class="chart-container">
+                <h4>Biểu đồ Trọng số Tiêu chí</h4>
+                <canvas id="criteriaWeightsChart"></canvas>
             </div>
             {% endif %}
 
-             <div class="db-save-info">
-             {% if save_attempted %}
-                {% if save_successful %} <p style="color:green;">Kết quả (từ DB) đã được lưu.</p>
-                {% else %} <p style="color:red;">Lưu kết quả vào DB thất bại.</p> {% endif %}
-             {% elif not can_save_to_db %}
-                 <p style="color:orange;">Kết quả không lưu vào DB (dữ liệu tùy chỉnh).</p>
-             {% endif %}
+            {% if chart_data.final_scores and chart_data.final_scores.labels and chart_data.final_scores.data %}
+            <div class="chart-container">
+                <h4>Biểu đồ Điểm tổng hợp Phương án</h4>
+                <canvas id="finalScoresChart"></canvas>
             </div>
-    </div>
+            {% endif %}
 
-    {# --- THÊM MỚI: Khu vực biểu đồ --- #}
-    {% if chart_data %}
-    <div class="results-section charts-section">
-        <h2>3. Trực quan hóa dữ liệu</h2>
-
-        {% if chart_data.criteria_weights and chart_data.criteria_weights.labels and chart_data.criteria_weights.data %}
-        <div class="chart-container">
-            <h4>Biểu đồ Trọng số Tiêu chí</h4>
-            <canvas id="criteriaWeightsChart"></canvas>
+            {% if chart_data.alternative_weights_by_criteria and chart_data.alternative_weights_by_criteria.labels and chart_data.alternative_weights_by_criteria.datasets %}
+            <div class="chart-container">
+                <h4>Biểu đồ Trọng số Phương án theo từng Tiêu chí</h4>
+                <canvas id="altWeightsByCriteriaChart"></canvas>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 
-        {% if chart_data.final_scores and chart_data.final_scores.labels and chart_data.final_scores.data %}
-        <div class="chart-container">
-            <h4>Biểu đồ Điểm tổng hợp Phương án</h4>
-            <canvas id="finalScoresChart"></canvas>
-        </div>
+        {% elif not error %}
+             <h2>2. Kết quả tổng hợp và xếp hạng</h2>
+             <p class="data-unavailable">Không có kết quả cuối cùng để hiển thị.</p>
         {% endif %}
+    </div> <!-- KẾT THÚC Wrapper #results-content-to-export -->
 
-        {% if chart_data.alternative_weights_by_criteria and chart_data.alternative_weights_by_criteria.labels and chart_data.alternative_weights_by_criteria.datasets %}
-        <div class="chart-container">
-            <h4>Biểu đồ Trọng số Phương án theo từng Tiêu chí</h4>
-            <canvas id="altWeightsByCriteriaChart"></canvas>
-        </div>
-        {% endif %}
-    </div>
-    {% endif %}
-    {# --- KẾT THÚC THÊM MỚI --- #}
-
-    {% elif not error %}
-         <h2>2. Kết quả tổng hợp và xếp hạng</h2>
-         <p class="data-unavailable">Không có kết quả cuối cùng để hiển thị.</p>
-    {% endif %}
 
     <div class="button-container">
         <a href="{{ url_for('clear_session_and_start') }}" class="btn">Bắt đầu lại phân tích mới</a>
         <a href="{{ url_for('results_history') }}" class="btn btn-secondary">Xem lịch sử kết quả (DB)</a>
+        <!-- THÊM MỚI: Nút xuất PDF -->
+        <button id="exportPdfButton" class="btn btn-info">Xuất ra PDF</button>
     </div>
 
-    {# --- THÊM MỚI: JavaScript cho biểu đồ --- #}
+    {# --- JavaScript cho biểu đồ --- #}
     {% if chart_data %}
     <script>
+        // ... (Mã JavaScript cho Chart.js giữ nguyên như trước) ...
         // Hàm tạo màu ngẫu nhiên cho biểu đồ
         function getRandomColor(opacity = 0.7) {
             const r = Math.floor(Math.random() * 255);
@@ -276,7 +352,7 @@
         }
         function getDistinctColors(count, opacity = 0.7) {
             const colors = [];
-            const baseColors = [ // Một số màu cơ bản để bắt đầu
+            const baseColors = [ 
                 [54, 162, 235], [255, 99, 132], [75, 192, 192], [255, 206, 86],
                 [153, 102, 255], [255, 159, 64], [46, 204, 113], [231, 76, 60],
                 [149, 165, 166], [26, 188, 156] 
@@ -295,7 +371,6 @@
         document.addEventListener('DOMContentLoaded', function () {
             const chartData = {{ chart_data | tojson | safe }};
 
-            // 1. Biểu đồ trọng số tiêu chí
             if (chartData.criteria_weights && chartData.criteria_weights.labels && chartData.criteria_weights.data) {
                 const ctxCritWeights = document.getElementById('criteriaWeightsChart');
                 if (ctxCritWeights) {
@@ -311,22 +386,16 @@
                                 borderWidth: 1
                             }]
                         },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: true,
-                            scales: { y: { beginAtZero: true, title: { display: true, text: 'Trọng số' } } },
-                            plugins: { legend: { display: false } }
-                        }
+                        options: { responsive: true, maintainAspectRatio: true, scales: { y: { beginAtZero: true, title: { display: true, text: 'Trọng số' } } }, plugins: { legend: { display: false } } }
                     });
                 }
             }
 
-            // 2. Biểu đồ điểm tổng hợp phương án
             if (chartData.final_scores && chartData.final_scores.labels && chartData.final_scores.data) {
                 const ctxFinalScores = document.getElementById('finalScoresChart');
                 if (ctxFinalScores) {
                      new Chart(ctxFinalScores, {
-                        type: 'bar', // Sử dụng 'bar' để làm biểu đồ cột ngang
+                        type: 'bar',
                         data: {
                             labels: chartData.final_scores.labels,
                             datasets: [{
@@ -337,18 +406,11 @@
                                 borderWidth: 1
                             }]
                         },
-                        options: {
-                            indexAxis: 'y', // Đây là key để làm biểu đồ cột ngang
-                            responsive: true,
-                            maintainAspectRatio: true,
-                            scales: { x: { beginAtZero: true, title: { display: true, text: 'Điểm' } } },
-                            plugins: { legend: { display: false } }
-                        }
+                        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true, scales: { x: { beginAtZero: true, title: { display: true, text: 'Điểm' } } }, plugins: { legend: { display: false } } }
                     });
                 }
             }
 
-            // 3. Biểu đồ trọng số phương án theo từng tiêu chí (Grouped Bar Chart)
             if (chartData.alternative_weights_by_criteria && chartData.alternative_weights_by_criteria.labels && chartData.alternative_weights_by_criteria.datasets) {
                 const ctxAltWByCrit = document.getElementById('altWeightsByCriteriaChart');
                 if (ctxAltWByCrit) {
@@ -358,35 +420,87 @@
                         borderColor: getDistinctColors(chartData.alternative_weights_by_criteria.datasets.length, 1)[index],
                         borderWidth: 1
                     }));
-
                     new Chart(ctxAltWByCrit, {
                         type: 'bar',
-                        data: {
-                            labels: chartData.alternative_weights_by_criteria.labels, // Tên tiêu chí
-                            datasets: datasets // Mỗi dataset là một phương án
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: true,
-                            scales: {
-                                y: { beginAtZero: true, title: { display: true, text: 'Trọng số cục bộ' } },
-                                x: { title: { display: true, text: 'Tiêu chí' } }
-                            },
-                            plugins: {
-                                legend: { position: 'top' },
-                                tooltip: { mode: 'index', intersect: false }
-                            },
-                            interaction: { // Cần thiết cho grouped bar
-                                mode: 'index',
-                                intersect: false,
-                            }
-                        }
+                        data: { labels: chartData.alternative_weights_by_criteria.labels, datasets: datasets },
+                        options: { responsive: true, maintainAspectRatio: true, scales: { y: { beginAtZero: true, title: { display: true, text: 'Trọng số cục bộ' } }, x: { title: { display: true, text: 'Tiêu chí' } } }, plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }, interaction: { mode: 'index', intersect: false } }
                     });
                 }
             }
         });
     </script>
     {% endif %}
-    {# --- KẾT THÚC THÊM MỚI --- #}
+
+    <!-- THÊM MỚI: Thư viện html2pdf.js và mã JavaScript để xuất PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const exportButton = document.getElementById('exportPdfButton');
+        if (exportButton) {
+            exportButton.addEventListener('click', function () {
+                const elementToExport = document.getElementById('results-content-to-export');
+                if (!elementToExport) {
+                    alert("Lỗi: Không tìm thấy nội dung để xuất PDF.");
+                    return;
+                }
+
+                // 1. Tạm thời mở tất cả các thẻ <details>
+                const detailsElements = elementToExport.querySelectorAll('details');
+                const originalOpenStates = [];
+                detailsElements.forEach(detail => {
+                    originalOpenStates.push({ element: detail, open: detail.open });
+                    detail.open = true; // Đảm bảo nội dung hiển thị trong PDF
+                });
+
+                // 2. Tạm thời ẩn các nút điều khiển khỏi PDF
+                const buttonContainer = document.querySelector('.button-container');
+                let originalButtonContainerDisplay = '';
+                if(buttonContainer) {
+                    originalButtonContainerDisplay = buttonContainer.style.display;
+                    buttonContainer.style.display = 'none';
+                }
+
+
+                const now = new Date();
+                const timestamp = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+                const filename = `KetQua_AHP_${timestamp}.pdf`;
+
+                const opt = {
+                  margin:       [0.4, 0.4, 0.5, 0.4], // inches [top, left, bottom, right]
+                  filename:     filename,
+                  image:        { type: 'jpeg', quality: 0.95 }, // Chất lượng ảnh (cho canvas)
+                  html2canvas:  {
+                                scale: 2, // Render ở độ phân giải cao hơn
+                                logging: false, // true để debug
+                                letterRendering: true,
+                                useCORS: true, // Cho ảnh từ nguồn ngoài (nếu có)
+                                scrollY: 0 // Bắt đầu chụp từ đầu trang
+                              },
+                  jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
+                  pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] } // Cố gắng tránh ngắt trang giữa các phần tử
+                };
+
+                // Tạo PDF
+                html2pdf().from(elementToExport).set(opt).save()
+                .then(() => {
+                    // Khôi phục trạng thái ban đầu sau khi tạo PDF
+                    originalOpenStates.forEach(state => state.element.open = state.open);
+                    if(buttonContainer) {
+                        buttonContainer.style.display = originalButtonContainerDisplay;
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi khi xuất PDF:", err);
+                    alert("Đã xảy ra lỗi khi xuất PDF. Vui lòng kiểm tra console để biết thêm chi tiết.");
+                    // Đảm bảo khôi phục trạng thái ngay cả khi có lỗi
+                    originalOpenStates.forEach(state => state.element.open = state.open);
+                    if(buttonContainer) {
+                        buttonContainer.style.display = originalButtonContainerDisplay;
+                    }
+                });
+            });
+        }
+    });
+    </script>
 </body>
 </html>

@@ -31,7 +31,7 @@
       dbSection.style.display = (mode === 'db') ? 'block' : 'none';
       customSection.style.display = (mode === 'custom') ? 'block' : 'none';
 
-      dbSection.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = (mode === 'db'));
+      dbSection.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.required = false);
       // customSection.querySelectorAll('input[type="text"]').forEach(inp => inp.required = (mode === 'custom')); // Bỏ required vì có thể không nhập gì nếu chỉ thêm vào DB
 
       if (mode === 'db') {
